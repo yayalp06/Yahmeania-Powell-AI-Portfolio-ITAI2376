@@ -1,0 +1,1722 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Ko-C1e7kPljT"
+      },
+      "source": [
+        "# FitBot LangChain AI Agent\n",
+        "\n",
+        "FitBot is an AI personal trainer prototype. It takes daily activity data like steps, active minutes, and sedentary minutes, predicts calories burned, and recommends workouts based on the user’s goal, equipment, experience level, and limitations. I designed it to work even without an API key, but it is also ready to connect to LangChain for LLM tool-calling."
+      ],
+      "id": "Ko-C1e7kPljT"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "BDxiJ5H0PljW"
+      },
+      "source": [
+        "## Cell 1 —  Installation\n",
+        "\n",
+        "“This cell is here to make the notebook portable. If the environment does not already have the required libraries, I can uncomment this line and install everything needed to run the project.”\n",
+        "\n",
+        "This cell lists the Python packages needed for the project. It is commented out because many environments, including some Colab sessions, may already have several of these libraries installed. If a library is missing, the user can uncomment the install line and run it.\n",
+        "\n",
+        "The packages include data science tools like Pandas, NumPy, and Scikit-learn, plus LangChain for agent/tool functionality and Gradio for the optional user interface."
+      ],
+      "id": "BDxiJ5H0PljW"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 1,
+      "metadata": {
+        "id": "WksyHJThPljX"
+      },
+      "outputs": [],
+      "source": [
+        "# install for Colab\n",
+        "# !pip install -q pandas numpy scikit-learn langchain langchain-openai gradio\n"
+      ],
+      "id": "WksyHJThPljX"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "hzkOW9haPljY"
+      },
+      "source": [
+        "## Cell 2 — Import Libraries and Set Random Seeds\n",
+        "\n",
+        "“This cell prepares the notebook by importing the tools I need. It also sets random seeds so the project is reproducible instead of changing randomly every time I run it.”\n",
+        "\n",
+        "This cell imports every library used in the notebook. Pandas and NumPy handle data processing, Scikit-learn handles machine learning, and Python dataclasses help create a simple memory system for the AI agent.\n",
+        "\n",
+        "The cell also sets random seeds for Python and NumPy. This makes the results more reproducible, which means the notebook should create the same fallback data and similar model results each time it is run."
+      ],
+      "id": "hzkOW9haPljY"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 2,
+      "metadata": {
+        "id": "JNuEBcj6PljY"
+      },
+      "outputs": [],
+      "source": [
+        "import os, random, math\n",
+        "import pandas as pd\n",
+        "import numpy as np\n",
+        "from dataclasses import dataclass, field\n",
+        "from typing import List, Dict, Any\n",
+        "from sklearn.model_selection import train_test_split\n",
+        "from sklearn.preprocessing import StandardScaler, OneHotEncoder\n",
+        "from sklearn.compose import ColumnTransformer\n",
+        "from sklearn.pipeline import Pipeline\n",
+        "from sklearn.ensemble import RandomForestRegressor\n",
+        "from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score\n",
+        "random.seed(42)\n",
+        "np.random.seed(42)\n"
+      ],
+      "id": "JNuEBcj6PljY"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "jWSbkyQhPljY"
+      },
+      "source": [
+        "## Cell 3 — Data Loading Section\n",
+        "\n",
+        "“This section begins the data pipeline. The notebook first looks for the real Fitbit data file, but if that file is missing, it creates a realistic sample dataset with the same type of columns.”\n",
+        "\n",
+        "This markdown section introduces the data loading step. The project is designed to load the real Fitbit/Fitabase dataset if the CSV file is available. If the file is not available, the notebook automatically creates a fallback Fitbit-style dataset so the project can still run from beginning to end.\n",
+        "\n",
+        "This is important because final projects are often graded in a new environment where the original Kaggle file may not already be uploaded. The fallback dataset prevents the code from breaking."
+      ],
+      "id": "jWSbkyQhPljY"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "yt9_0wkZPljY"
+      },
+      "source": [
+        "## Cell 4 — Load the Fitbit Dataset or Create Fallback Data\n",
+        "\n",
+        "“This cell is responsible for getting the dataset ready. It either loads the real Kaggle Fitbit data or creates a fallback dataset with realistic activity patterns. This makes the project reliable because it can still run even if the CSV file is missing.”\n",
+        "\n",
+        "This code defines the `load_fitbit_data()` function. The function first checks whether `dailyActivity_merged.csv` exists in the notebook environment. If the file exists, it loads the real Fitbit/Fitabase dataset using Pandas.\n",
+        "\n",
+        "If the file does not exist, the function creates a synthetic fallback dataset with 940 records and 31 simulated users. The fallback data includes realistic fitness-tracking columns such as steps, active minutes, sedentary minutes, and calories. Calories are calculated using a formula that combines baseline calories, steps, active minutes, and random noise.\n",
+        "\n",
+        "At the end of the cell, the function is called and the first few rows of the dataset are displayed with `raw_df.head()`. This lets us verify that the data loaded correctly."
+      ],
+      "id": "yt9_0wkZPljY"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 3,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 241
+        },
+        "id": "pNIzpJKHPljY",
+        "outputId": "fc36a8ba-cf2b-48c5-9f74-966dc7b7da3b"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Kaggle file not found. Creating fallback Fitbit-style dataset.\n"
+          ]
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "       Id ActivityDate  TotalSteps  VeryActiveMinutes  FairlyActiveMinutes  \\\n",
+              "0  100006   2016-04-17        9726                  0                   16   \n",
+              "1  100019   2016-04-23        2282                 42                   14   \n",
+              "2  100028   2016-05-05        7581                 18                    0   \n",
+              "3  100014   2016-05-09        5294                 42                   28   \n",
+              "4  100010   2016-05-02        1686                 20                    5   \n",
+              "\n",
+              "   LightlyActiveMinutes  SedentaryMinutes  Calories  \n",
+              "0                   176              1104      2261  \n",
+              "1                   259              1121      2618  \n",
+              "2                   327               755      2647  \n",
+              "3                   241              1057      2604  \n",
+              "4                   220               900      1950  "
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-10009882-4631-4dd0-aaa6-ef5a80eccde7\" class=\"colab-df-container\">\n",
+              "    <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>Id</th>\n",
+              "      <th>ActivityDate</th>\n",
+              "      <th>TotalSteps</th>\n",
+              "      <th>VeryActiveMinutes</th>\n",
+              "      <th>FairlyActiveMinutes</th>\n",
+              "      <th>LightlyActiveMinutes</th>\n",
+              "      <th>SedentaryMinutes</th>\n",
+              "      <th>Calories</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>0</th>\n",
+              "      <td>100006</td>\n",
+              "      <td>2016-04-17</td>\n",
+              "      <td>9726</td>\n",
+              "      <td>0</td>\n",
+              "      <td>16</td>\n",
+              "      <td>176</td>\n",
+              "      <td>1104</td>\n",
+              "      <td>2261</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>1</th>\n",
+              "      <td>100019</td>\n",
+              "      <td>2016-04-23</td>\n",
+              "      <td>2282</td>\n",
+              "      <td>42</td>\n",
+              "      <td>14</td>\n",
+              "      <td>259</td>\n",
+              "      <td>1121</td>\n",
+              "      <td>2618</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2</th>\n",
+              "      <td>100028</td>\n",
+              "      <td>2016-05-05</td>\n",
+              "      <td>7581</td>\n",
+              "      <td>18</td>\n",
+              "      <td>0</td>\n",
+              "      <td>327</td>\n",
+              "      <td>755</td>\n",
+              "      <td>2647</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>3</th>\n",
+              "      <td>100014</td>\n",
+              "      <td>2016-05-09</td>\n",
+              "      <td>5294</td>\n",
+              "      <td>42</td>\n",
+              "      <td>28</td>\n",
+              "      <td>241</td>\n",
+              "      <td>1057</td>\n",
+              "      <td>2604</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>4</th>\n",
+              "      <td>100010</td>\n",
+              "      <td>2016-05-02</td>\n",
+              "      <td>1686</td>\n",
+              "      <td>20</td>\n",
+              "      <td>5</td>\n",
+              "      <td>220</td>\n",
+              "      <td>900</td>\n",
+              "      <td>1950</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "    <div class=\"colab-df-buttons\">\n",
+              "\n",
+              "  <div class=\"colab-df-container\">\n",
+              "    <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-10009882-4631-4dd0-aaa6-ef5a80eccde7')\"\n",
+              "            title=\"Convert this dataframe to an interactive table.\"\n",
+              "            style=\"display:none;\">\n",
+              "\n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\" viewBox=\"0 -960 960 960\">\n",
+              "    <path d=\"M120-120v-720h720v720H120Zm60-500h600v-160H180v160Zm220 220h160v-160H400v160Zm0 220h160v-160H400v160ZM180-400h160v-160H180v160Zm440 0h160v-160H620v160ZM180-180h160v-160H180v160Zm440 0h160v-160H620v160Z\"/>\n",
+              "  </svg>\n",
+              "    </button>\n",
+              "\n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-buttons div {\n",
+              "      margin-bottom: 4px;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "    <script>\n",
+              "      const buttonEl =\n",
+              "        document.querySelector('#df-10009882-4631-4dd0-aaa6-ef5a80eccde7 button.colab-df-convert');\n",
+              "      buttonEl.style.display =\n",
+              "        google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "      async function convertToInteractive(key) {\n",
+              "        const element = document.querySelector('#df-10009882-4631-4dd0-aaa6-ef5a80eccde7');\n",
+              "        const dataTable =\n",
+              "          await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                    [key], {});\n",
+              "        if (!dataTable) return;\n",
+              "\n",
+              "        const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "          '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "          + ' to learn more about interactive tables.';\n",
+              "        element.innerHTML = '';\n",
+              "        dataTable['output_type'] = 'display_data';\n",
+              "        await google.colab.output.renderOutput(dataTable, element);\n",
+              "        const docLink = document.createElement('div');\n",
+              "        docLink.innerHTML = docLinkHtml;\n",
+              "        element.appendChild(docLink);\n",
+              "      }\n",
+              "    </script>\n",
+              "  </div>\n",
+              "\n",
+              "\n",
+              "    </div>\n",
+              "  </div>\n"
+            ],
+            "application/vnd.google.colaboratory.intrinsic+json": {
+              "type": "dataframe",
+              "variable_name": "raw_df",
+              "summary": "{\n  \"name\": \"raw_df\",\n  \"rows\": 940,\n  \"fields\": [\n    {\n      \"column\": \"Id\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 9,\n        \"min\": 100000,\n        \"max\": 100030,\n        \"num_unique_values\": 31,\n        \"samples\": [\n          100008,\n          100011,\n          100030\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"ActivityDate\",\n      \"properties\": {\n        \"dtype\": \"object\",\n        \"num_unique_values\": 31,\n        \"samples\": [\n          \"2016-05-11\",\n          \"2016-04-12\",\n          \"2016-04-26\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"TotalSteps\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 3340,\n        \"min\": 0,\n        \"max\": 17977,\n        \"num_unique_values\": 893,\n        \"samples\": [\n          5594,\n          10215,\n          6253\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"VeryActiveMinutes\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 15,\n        \"min\": 0,\n        \"max\": 69,\n        \"num_unique_values\": 65,\n        \"samples\": [\n          54,\n          50,\n          0\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"FairlyActiveMinutes\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 10,\n        \"min\": 0,\n        \"max\": 51,\n        \"num_unique_values\": 49,\n        \"samples\": [\n          32,\n          42,\n          44\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"LightlyActiveMinutes\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 71,\n        \"min\": 20,\n        \"max\": 382,\n        \"num_unique_values\": 286,\n        \"samples\": [\n          218,\n          50,\n          282\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"SedentaryMinutes\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 156,\n        \"min\": 400,\n        \"max\": 1300,\n        \"num_unique_values\": 467,\n        \"samples\": [\n          902,\n          709,\n          999\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"Calories\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 291,\n        \"min\": 1450,\n        \"max\": 3384,\n        \"num_unique_values\": 648,\n        \"samples\": [\n          3120,\n          2345,\n          2115\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    }\n  ]\n}"
+            }
+          },
+          "metadata": {},
+          "execution_count": 3
+        }
+      ],
+      "source": [
+        "def load_fitbit_data(path='dailyActivity_merged.csv'):\n",
+        "    if os.path.exists(path):\n",
+        "        print('Loaded Kaggle/Fitbit dataset')\n",
+        "        return pd.read_csv(path)\n",
+        "    print('Kaggle file not found. Creating fallback Fitbit-style dataset.')\n",
+        "    n = 940\n",
+        "    dates = pd.date_range('2016-04-12', periods=31)\n",
+        "    df = pd.DataFrame({\n",
+        "        'Id': np.random.choice(range(100000, 100031), n),\n",
+        "        'ActivityDate': np.random.choice(dates.astype(str), n),\n",
+        "        'TotalSteps': np.clip(np.random.normal(7600, 3500, n), 0, 19000).astype(int),\n",
+        "        'VeryActiveMinutes': np.clip(np.random.normal(20, 18, n), 0, 120).astype(int),\n",
+        "        'FairlyActiveMinutes': np.clip(np.random.normal(15, 12, n), 0, 90).astype(int),\n",
+        "        'LightlyActiveMinutes': np.clip(np.random.normal(185, 75, n), 20, 500).astype(int),\n",
+        "        'SedentaryMinutes': np.clip(np.random.normal(930, 160, n), 400, 1300).astype(int),\n",
+        "    })\n",
+        "    active_factor = df['VeryActiveMinutes']*8 + df['FairlyActiveMinutes']*5 + df['LightlyActiveMinutes']*2\n",
+        "    df['Calories'] = (1450 + df['TotalSteps']*.055 + active_factor + np.random.normal(0, 110, n)).clip(1200, 3800).astype(int)\n",
+        "    return df\n",
+        "raw_df = load_fitbit_data()\n",
+        "raw_df.head()\n"
+      ],
+      "id": "pNIzpJKHPljY"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "8PtjszAiPljZ"
+      },
+      "source": [
+        "## Cell 5 — Preprocessing Section\n",
+        "“This section prepares the raw dataset for machine learning. Cleaning the data is important because messy data can lead to inaccurate predictions and unreliable recommendations.”\n",
+        "\n",
+        "This section introduces the data cleaning process. Raw datasets often contain missing values, duplicate rows, incorrect data types, and unnecessary columns. Before training a model, we need to clean the dataset so the machine learning pipeline receives consistent and reliable input.\n",
+        "\n",
+        "The preprocessing step keeps only the core fitness columns, converts dates and numbers into proper formats, fills missing values, and removes duplicates."
+      ],
+      "id": "8PtjszAiPljZ"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "qwNuut7gPljZ"
+      },
+      "source": [
+        "## Cell 6 — Clean the Dataset and Report Data Quality\n",
+        "\n",
+        "“This cell cleans the data. It fixes column formatting, converts dates and numbers, fills missing values with medians, removes duplicate rows, and then gives me a quality report so I can prove the data improved before modeling.”\n",
+        "\n",
+        "This code defines the `preprocess_data()` function. First, it makes a copy of the dataset so the original raw data is not changed. Then it standardizes column names by removing extra spaces and keeps only the columns needed for the project.\n",
+        "\n",
+        "The function converts the `ActivityDate` column into a datetime format so we can later create day-of-week features. It also converts all numeric columns into actual numeric values and fills missing numeric values using the median. Median imputation is useful because it is less affected by extreme outliers than the mean.\n",
+        "\n",
+        "The function also counts missing values and duplicate rows before and after cleaning. This creates a small quality report showing whether preprocessing improved the dataset. Finally, the cleaned dataset and the quality report are returned."
+      ],
+      "id": "qwNuut7gPljZ"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 4,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "FAinXKQBPljZ",
+        "outputId": "0dccf3e9-78f7-4d86-9056-51f52c0158ad"
+      },
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "{'missing_before': 0,\n",
+              " 'missing_after': 0,\n",
+              " 'duplicates_before': 0,\n",
+              " 'duplicates_after': 0,\n",
+              " 'processed_rows': 940}"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 4
+        }
+      ],
+      "source": [
+        "CORE_COLUMNS = ['Id','ActivityDate','TotalSteps','VeryActiveMinutes','FairlyActiveMinutes','LightlyActiveMinutes','SedentaryMinutes','Calories']\n",
+        "def preprocess_data(df):\n",
+        "    df = df.copy(); df.columns = [c.strip() for c in df.columns]\n",
+        "    df = df[[c for c in CORE_COLUMNS if c in df.columns]]\n",
+        "    df['ActivityDate'] = pd.to_datetime(df['ActivityDate'], errors='coerce')\n",
+        "    missing_before = int(df.isna().sum().sum()); duplicates_before = int(df.duplicated().sum())\n",
+        "    for col in df.columns:\n",
+        "        if col != 'ActivityDate':\n",
+        "            df[col] = pd.to_numeric(df[col], errors='coerce')\n",
+        "            df[col] = df[col].fillna(df[col].median())\n",
+        "    df['ActivityDate'] = df['ActivityDate'].fillna(df['ActivityDate'].mode()[0])\n",
+        "    df = df.drop_duplicates().reset_index(drop=True)\n",
+        "    return df, {'missing_before': missing_before, 'missing_after': int(df.isna().sum().sum()), 'duplicates_before': duplicates_before, 'duplicates_after': int(df.duplicated().sum()), 'processed_rows': len(df)}\n",
+        "clean_df, quality_report = preprocess_data(raw_df)\n",
+        "quality_report\n"
+      ],
+      "id": "FAinXKQBPljZ"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "aH-049l3PljZ"
+      },
+      "source": [
+        "## Cell 7 — Feature Engineering Section\n",
+        "\n",
+        "“Feature engineering is where I turn basic tracker numbers into more meaningful fitness signals. These new features help the AI understand the user better than raw steps alone.”\n",
+        "\n",
+        "This section introduces feature engineering, which means creating new useful columns from the original raw data. Instead of only using basic columns like total steps, FitBot creates additional activity indicators that better describe a user’s fitness behavior.\n",
+        "\n",
+        "These new features help the model and recommendation engine understand activity quality, sedentary behavior, goal progress, and recovery needs."
+      ],
+      "id": "aH-049l3PljZ"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "rFNTmsT7PljZ"
+      },
+      "source": [
+        "## Cell 8 — Create Fitness-Based Engineered Features\n",
+        "\n",
+        "“This cell creates the intelligence behind the project. It turns raw Fitbit data into features like activity score, recovery flag, step goal percentage, and intensity category so FitBot can make smarter predictions and recommendations.”\n",
+        "\n",
+        "This code defines the `engineer_features()` function. It creates several new columns that make the dataset more useful for both prediction and recommendations.\n",
+        "\n",
+        "`DayOfWeek` identifies the day name from the activity date, and `WeekendFlag` marks whether the day was a weekend. `TotalActiveMinutes` combines very active, fairly active, and lightly active minutes into one total movement measure. `SedentaryRatio` calculates how much of the day was sedentary compared to total recorded movement time.\n",
+        "\n",
+        "`StepGoalPct` measures progress toward a 10,000-step benchmark, while `StepGap` calculates how many steps remain before reaching that goal. `ActivityScore` combines steps, active minutes, and sedentary behavior into one weighted fitness score. `RecoveryFlag` identifies days where the user may need lighter activity because steps are low and sedentary time is high. Finally, `IntensityCategory` and `StepBand` turn numerical patterns into readable categories."
+      ],
+      "id": "rFNTmsT7PljZ"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 5,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 224
+        },
+        "id": "TTAySZwVPljZ",
+        "outputId": "284fa31c-8cd1-49a3-9f4d-25f1abefb9ae"
+      },
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "       Id ActivityDate  TotalSteps  VeryActiveMinutes  FairlyActiveMinutes  \\\n",
+              "0  100006   2016-04-17        9726                  0                   16   \n",
+              "1  100019   2016-04-23        2282                 42                   14   \n",
+              "2  100028   2016-05-05        7581                 18                    0   \n",
+              "3  100014   2016-05-09        5294                 42                   28   \n",
+              "4  100010   2016-05-02        1686                 20                    5   \n",
+              "\n",
+              "   LightlyActiveMinutes  SedentaryMinutes  Calories DayOfWeek  WeekendFlag  \\\n",
+              "0                   176              1104      2261    Sunday            1   \n",
+              "1                   259              1121      2618  Saturday            1   \n",
+              "2                   327               755      2647  Thursday            0   \n",
+              "3                   241              1057      2604    Monday            0   \n",
+              "4                   220               900      1950    Monday            0   \n",
+              "\n",
+              "   TotalActiveMinutes  SedentaryRatio  StepGoalPct  StepGap  ActivityScore  \\\n",
+              "0                 192        0.851195       0.9726      274      14.001220   \n",
+              "1                 315        0.780097       0.2282     7718      19.531610   \n",
+              "2                 345        0.685740       0.7581     2419      19.148039   \n",
+              "3                 311        0.772096       0.5294     4706      24.135614   \n",
+              "4                 245        0.785340       0.1686     8314      10.894639   \n",
+              "\n",
+              "   RecoveryFlag IntensityCategory  StepBand  \n",
+              "0             0              high  moderate  \n",
+              "1             0              high       low  \n",
+              "2             0              high  moderate  \n",
+              "3             0              high  moderate  \n",
+              "4             0          moderate       low  "
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-ebd96d54-5a94-44da-a395-0dbc2bd10c75\" class=\"colab-df-container\">\n",
+              "    <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>Id</th>\n",
+              "      <th>ActivityDate</th>\n",
+              "      <th>TotalSteps</th>\n",
+              "      <th>VeryActiveMinutes</th>\n",
+              "      <th>FairlyActiveMinutes</th>\n",
+              "      <th>LightlyActiveMinutes</th>\n",
+              "      <th>SedentaryMinutes</th>\n",
+              "      <th>Calories</th>\n",
+              "      <th>DayOfWeek</th>\n",
+              "      <th>WeekendFlag</th>\n",
+              "      <th>TotalActiveMinutes</th>\n",
+              "      <th>SedentaryRatio</th>\n",
+              "      <th>StepGoalPct</th>\n",
+              "      <th>StepGap</th>\n",
+              "      <th>ActivityScore</th>\n",
+              "      <th>RecoveryFlag</th>\n",
+              "      <th>IntensityCategory</th>\n",
+              "      <th>StepBand</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>0</th>\n",
+              "      <td>100006</td>\n",
+              "      <td>2016-04-17</td>\n",
+              "      <td>9726</td>\n",
+              "      <td>0</td>\n",
+              "      <td>16</td>\n",
+              "      <td>176</td>\n",
+              "      <td>1104</td>\n",
+              "      <td>2261</td>\n",
+              "      <td>Sunday</td>\n",
+              "      <td>1</td>\n",
+              "      <td>192</td>\n",
+              "      <td>0.851195</td>\n",
+              "      <td>0.9726</td>\n",
+              "      <td>274</td>\n",
+              "      <td>14.001220</td>\n",
+              "      <td>0</td>\n",
+              "      <td>high</td>\n",
+              "      <td>moderate</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>1</th>\n",
+              "      <td>100019</td>\n",
+              "      <td>2016-04-23</td>\n",
+              "      <td>2282</td>\n",
+              "      <td>42</td>\n",
+              "      <td>14</td>\n",
+              "      <td>259</td>\n",
+              "      <td>1121</td>\n",
+              "      <td>2618</td>\n",
+              "      <td>Saturday</td>\n",
+              "      <td>1</td>\n",
+              "      <td>315</td>\n",
+              "      <td>0.780097</td>\n",
+              "      <td>0.2282</td>\n",
+              "      <td>7718</td>\n",
+              "      <td>19.531610</td>\n",
+              "      <td>0</td>\n",
+              "      <td>high</td>\n",
+              "      <td>low</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2</th>\n",
+              "      <td>100028</td>\n",
+              "      <td>2016-05-05</td>\n",
+              "      <td>7581</td>\n",
+              "      <td>18</td>\n",
+              "      <td>0</td>\n",
+              "      <td>327</td>\n",
+              "      <td>755</td>\n",
+              "      <td>2647</td>\n",
+              "      <td>Thursday</td>\n",
+              "      <td>0</td>\n",
+              "      <td>345</td>\n",
+              "      <td>0.685740</td>\n",
+              "      <td>0.7581</td>\n",
+              "      <td>2419</td>\n",
+              "      <td>19.148039</td>\n",
+              "      <td>0</td>\n",
+              "      <td>high</td>\n",
+              "      <td>moderate</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>3</th>\n",
+              "      <td>100014</td>\n",
+              "      <td>2016-05-09</td>\n",
+              "      <td>5294</td>\n",
+              "      <td>42</td>\n",
+              "      <td>28</td>\n",
+              "      <td>241</td>\n",
+              "      <td>1057</td>\n",
+              "      <td>2604</td>\n",
+              "      <td>Monday</td>\n",
+              "      <td>0</td>\n",
+              "      <td>311</td>\n",
+              "      <td>0.772096</td>\n",
+              "      <td>0.5294</td>\n",
+              "      <td>4706</td>\n",
+              "      <td>24.135614</td>\n",
+              "      <td>0</td>\n",
+              "      <td>high</td>\n",
+              "      <td>moderate</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>4</th>\n",
+              "      <td>100010</td>\n",
+              "      <td>2016-05-02</td>\n",
+              "      <td>1686</td>\n",
+              "      <td>20</td>\n",
+              "      <td>5</td>\n",
+              "      <td>220</td>\n",
+              "      <td>900</td>\n",
+              "      <td>1950</td>\n",
+              "      <td>Monday</td>\n",
+              "      <td>0</td>\n",
+              "      <td>245</td>\n",
+              "      <td>0.785340</td>\n",
+              "      <td>0.1686</td>\n",
+              "      <td>8314</td>\n",
+              "      <td>10.894639</td>\n",
+              "      <td>0</td>\n",
+              "      <td>moderate</td>\n",
+              "      <td>low</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "    <div class=\"colab-df-buttons\">\n",
+              "\n",
+              "  <div class=\"colab-df-container\">\n",
+              "    <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-ebd96d54-5a94-44da-a395-0dbc2bd10c75')\"\n",
+              "            title=\"Convert this dataframe to an interactive table.\"\n",
+              "            style=\"display:none;\">\n",
+              "\n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\" viewBox=\"0 -960 960 960\">\n",
+              "    <path d=\"M120-120v-720h720v720H120Zm60-500h600v-160H180v160Zm220 220h160v-160H400v160Zm0 220h160v-160H400v160ZM180-400h160v-160H180v160Zm440 0h160v-160H620v160ZM180-180h160v-160H180v160Zm440 0h160v-160H620v160Z\"/>\n",
+              "  </svg>\n",
+              "    </button>\n",
+              "\n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-buttons div {\n",
+              "      margin-bottom: 4px;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "    <script>\n",
+              "      const buttonEl =\n",
+              "        document.querySelector('#df-ebd96d54-5a94-44da-a395-0dbc2bd10c75 button.colab-df-convert');\n",
+              "      buttonEl.style.display =\n",
+              "        google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "      async function convertToInteractive(key) {\n",
+              "        const element = document.querySelector('#df-ebd96d54-5a94-44da-a395-0dbc2bd10c75');\n",
+              "        const dataTable =\n",
+              "          await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                    [key], {});\n",
+              "        if (!dataTable) return;\n",
+              "\n",
+              "        const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "          '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "          + ' to learn more about interactive tables.';\n",
+              "        element.innerHTML = '';\n",
+              "        dataTable['output_type'] = 'display_data';\n",
+              "        await google.colab.output.renderOutput(dataTable, element);\n",
+              "        const docLink = document.createElement('div');\n",
+              "        docLink.innerHTML = docLinkHtml;\n",
+              "        element.appendChild(docLink);\n",
+              "      }\n",
+              "    </script>\n",
+              "  </div>\n",
+              "\n",
+              "\n",
+              "    </div>\n",
+              "  </div>\n"
+            ],
+            "application/vnd.google.colaboratory.intrinsic+json": {
+              "type": "dataframe",
+              "variable_name": "feature_df",
+              "summary": "{\n  \"name\": \"feature_df\",\n  \"rows\": 940,\n  \"fields\": [\n    {\n      \"column\": \"Id\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 9,\n        \"min\": 100000,\n        \"max\": 100030,\n        \"num_unique_values\": 31,\n        \"samples\": [\n          100008,\n          100011,\n          100030\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"ActivityDate\",\n      \"properties\": {\n        \"dtype\": \"date\",\n        \"min\": \"2016-04-12 00:00:00\",\n        \"max\": \"2016-05-12 00:00:00\",\n        \"num_unique_values\": 31,\n        \"samples\": [\n          \"2016-05-11 00:00:00\",\n          \"2016-04-12 00:00:00\",\n          \"2016-04-26 00:00:00\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"TotalSteps\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 3340,\n        \"min\": 0,\n        \"max\": 17977,\n        \"num_unique_values\": 893,\n        \"samples\": [\n          5594,\n          10215,\n          6253\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"VeryActiveMinutes\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 15,\n        \"min\": 0,\n        \"max\": 69,\n        \"num_unique_values\": 65,\n        \"samples\": [\n          54,\n          50,\n          0\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"FairlyActiveMinutes\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 10,\n        \"min\": 0,\n        \"max\": 51,\n        \"num_unique_values\": 49,\n        \"samples\": [\n          32,\n          42,\n          44\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"LightlyActiveMinutes\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 71,\n        \"min\": 20,\n        \"max\": 382,\n        \"num_unique_values\": 286,\n        \"samples\": [\n          218,\n          50,\n          282\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"SedentaryMinutes\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 156,\n        \"min\": 400,\n        \"max\": 1300,\n        \"num_unique_values\": 467,\n        \"samples\": [\n          902,\n          709,\n          999\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"Calories\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 291,\n        \"min\": 1450,\n        \"max\": 3384,\n        \"num_unique_values\": 648,\n        \"samples\": [\n          3120,\n          2345,\n          2115\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"DayOfWeek\",\n      \"properties\": {\n        \"dtype\": \"category\",\n        \"num_unique_values\": 7,\n        \"samples\": [\n          \"Sunday\",\n          \"Saturday\",\n          \"Friday\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"WeekendFlag\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 0,\n        \"min\": 0,\n        \"max\": 1,\n        \"num_unique_values\": 2,\n        \"samples\": [\n          0,\n          1\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"TotalActiveMinutes\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 73,\n        \"min\": 20,\n        \"max\": 448,\n        \"num_unique_values\": 301,\n        \"samples\": [\n          304,\n          86\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"SedentaryRatio\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 0.06106772170195663,\n        \"min\": 0.5470183486238532,\n        \"max\": 0.9790836653386454,\n        \"num_unique_values\": 933,\n        \"samples\": [\n          0.8278688524590164,\n          0.7805044308111793\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"StepGoalPct\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 0.32952586105917486,\n        \"min\": 0.0,\n        \"max\": 1.5,\n        \"num_unique_values\": 877,\n        \"samples\": [\n          1.1505,\n          1.03\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"StepGap\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 2677,\n        \"min\": 0,\n        \"max\": 10000,\n        \"num_unique_values\": 683,\n        \"samples\": [\n          3463,\n          3601\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"ActivityScore\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 5.774925018200718,\n        \"min\": 0.699593495934959,\n        \"max\": 37.79352173913044,\n        \"num_unique_values\": 940,\n        \"samples\": [\n          14.465410129096327,\n          11.584384615384616\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"RecoveryFlag\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 0,\n        \"min\": 0,\n        \"max\": 1,\n        \"num_unique_values\": 2,\n        \"samples\": [\n          1,\n          0\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"IntensityCategory\",\n      \"properties\": {\n        \"dtype\": \"category\",\n        \"num_unique_values\": 3,\n        \"samples\": [\n          \"high\",\n          \"moderate\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"StepBand\",\n      \"properties\": {\n        \"dtype\": \"category\",\n        \"num_unique_values\": 4,\n        \"samples\": [\n          \"low\",\n          \"very_high\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    }\n  ]\n}"
+            }
+          },
+          "metadata": {},
+          "execution_count": 5
+        }
+      ],
+      "source": [
+        "def engineer_features(df):\n",
+        "    df = df.copy()\n",
+        "    df['DayOfWeek'] = df['ActivityDate'].dt.day_name()\n",
+        "    df['WeekendFlag'] = df['DayOfWeek'].isin(['Saturday','Sunday']).astype(int)\n",
+        "    df['TotalActiveMinutes'] = df['VeryActiveMinutes'] + df['FairlyActiveMinutes'] + df['LightlyActiveMinutes']\n",
+        "    df['SedentaryRatio'] = df['SedentaryMinutes'] / (df['SedentaryMinutes'] + df['TotalActiveMinutes'] + 1)\n",
+        "    df['StepGoalPct'] = np.minimum(df['TotalSteps'] / 10000, 1.5)\n",
+        "    df['StepGap'] = np.maximum(10000 - df['TotalSteps'], 0)\n",
+        "    df['ActivityScore'] = (df['TotalSteps']/1000) + (df['VeryActiveMinutes']*.25) + (df['FairlyActiveMinutes']*.15) + (df['LightlyActiveMinutes']*.03) - (df['SedentaryRatio']*4)\n",
+        "    df['RecoveryFlag'] = ((df['TotalSteps'] < 3500) & (df['SedentaryRatio'] > .82)).astype(int)\n",
+        "    df['IntensityCategory'] = pd.cut(df['ActivityScore'], [-999,5,11,999], labels=['low','moderate','high']).astype(str)\n",
+        "    df['StepBand'] = pd.cut(df['TotalSteps'], [-1,5000,10000,15000,999999], labels=['low','moderate','high','very_high']).astype(str)\n",
+        "    return df\n",
+        "feature_df = engineer_features(clean_df)\n",
+        "feature_df.head()\n"
+      ],
+      "id": "TTAySZwVPljZ"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Mw2FY5zxPlja"
+      },
+      "source": [
+        "## Cell 9 — Model Training Section\n",
+        "\n",
+        "“This section trains the calorie prediction model. I also compare it to a baseline average predictor so I can measure whether my model actually adds value.”\n",
+        "\n",
+        "This section introduces the machine learning part of the project. The goal is to train a supervised learning model that predicts calories burned based on the user’s activity data and engineered features.\n",
+        "\n",
+        "The model is compared to a simple baseline that predicts the average calorie value. This comparison helps prove whether the machine learning model is actually better than a basic guess."
+      ],
+      "id": "Mw2FY5zxPlja"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "XkELcT6-Plja"
+      },
+      "source": [
+        "## Cell 10 — Train and Evaluate the Random Forest Calorie Model\n",
+        "\n",
+        "“This cell trains the actual machine learning model. It preprocesses numeric and categorical features, trains a Random Forest Regressor, predicts calories on the test set, and compares the results against a baseline average-calorie prediction.”\n",
+        "\n",
+        "This cell selects the input features and target variable for the model. The input features include steps, active minutes, sedentary minutes, engineered features, and categorical labels. The target variable is `Calories`, which is what the model learns to predict.\n",
+        "\n",
+        "The cell separates numeric and categorical features. Numeric features are standardized using `StandardScaler`, while categorical features are converted into machine-readable format using `OneHotEncoder`. These transformations are placed inside a `ColumnTransformer`, which allows different preprocessing steps for different column types.\n",
+        "\n",
+        "Next, the code creates a Scikit-learn `Pipeline` that combines preprocessing and a `RandomForestRegressor`. A train-test split is used so the model trains on one portion of the data and is evaluated on unseen data. The model is measured using MAE, RMSE, and R-squared.\n",
+        "\n",
+        "The baseline predictor simply guesses the average training-set calorie value for every test row. Comparing FitBot to this baseline shows whether the model learned meaningful patterns."
+      ],
+      "id": "XkELcT6-Plja"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 6,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "NNOj7pGLPlja",
+        "outputId": "48965e3e-906b-440f-d47a-811d3869586e"
+      },
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "{'Baseline MAE': 234.28,\n",
+              " 'FitBot MAE': 101.4,\n",
+              " 'Baseline RMSE': 290.13,\n",
+              " 'FitBot RMSE': 123.16,\n",
+              " 'FitBot R2': 0.819}"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 6
+        }
+      ],
+      "source": [
+        "FEATURES = ['TotalSteps','VeryActiveMinutes','FairlyActiveMinutes','LightlyActiveMinutes','SedentaryMinutes','TotalActiveMinutes','SedentaryRatio','StepGoalPct','StepGap','ActivityScore','RecoveryFlag','WeekendFlag','IntensityCategory','StepBand']\n",
+        "X = feature_df[FEATURES]; y = feature_df['Calories']\n",
+        "numeric_features = X.select_dtypes(include=['int64','float64','int32','float32']).columns.tolist()\n",
+        "categorical_features = X.select_dtypes(include=['object','category']).columns.tolist()\n",
+        "preprocessor = ColumnTransformer([('num', StandardScaler(), numeric_features), ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)])\n",
+        "calorie_model = Pipeline([('preprocessor', preprocessor), ('model', RandomForestRegressor(n_estimators=150, random_state=42))])\n",
+        "X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.2, random_state=42)\n",
+        "calorie_model.fit(X_train, y_train)\n",
+        "y_pred = calorie_model.predict(X_test)\n",
+        "baseline_pred = np.full_like(y_test, y_train.mean(), dtype=float)\n",
+        "metrics = {'Baseline MAE': round(mean_absolute_error(y_test, baseline_pred),2), 'FitBot MAE': round(mean_absolute_error(y_test, y_pred),2), 'Baseline RMSE': round(math.sqrt(mean_squared_error(y_test, baseline_pred)),2), 'FitBot RMSE': round(math.sqrt(mean_squared_error(y_test, y_pred)),2), 'FitBot R2': round(r2_score(y_test, y_pred),3)}\n",
+        "metrics\n"
+      ],
+      "id": "NNOj7pGLPlja"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "a1seYRDXPlja"
+      },
+      "source": [
+        "## Cell 11 — Exercise Knowledge Base Section\n",
+        "\n",
+        "“This section creates FitBot’s workout knowledge base. It stores exercises in a structured format so the recommendation engine can filter them intelligently.”\n",
+        "\n",
+        "This section introduces the exercise database used by FitBot. The project does not rely only on machine learning; it also uses structured workout knowledge to recommend safe and relevant exercises.\n",
+        "\n",
+        "Each exercise includes metadata such as goal, equipment type, difficulty level, target muscle group, impact level, limitations to avoid, sets, reps, and rest time."
+      ],
+      "id": "a1seYRDXPlja"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "ao3bAuv7Plja"
+      },
+      "source": [
+        "## Cell 12 — Build the Structured Exercise Knowledge Base\n",
+        "\n",
+        "“This cell builds the workout database. Each exercise is stored with details that help FitBot decide whether it matches the user’s goal, equipment, experience level, and physical limitations.”\n",
+        "\n",
+        "This cell creates the `EXERCISES` list. Each item in the list is a dictionary representing one exercise. The dictionary stores important information such as the exercise name, supported fitness goals, equipment needed, difficulty level, target muscle group, impact level, injury limitations, sets, reps, and rest time.\n",
+        "\n",
+        "This structure allows the recommendation engine to filter exercises based on the user’s profile. For example, if a user has knee pain, the system can avoid exercises that list knee pain in `avoid_if`. If a user only has bodyweight equipment, the system avoids dumbbell or gym-only exercises."
+      ],
+      "id": "ao3bAuv7Plja"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 7,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 615
+        },
+        "id": "r34v9jNTPlja",
+        "outputId": "f405f26c-8e73-4854-bbf7-011db6813f3d"
+      },
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "               name                                           goals  \\\n",
+              "0        Brisk Walk       [lose weight, maintain fitness, recovery]   \n",
+              "1  Bodyweight Squat  [gain strength, maintain fitness, lose weight]   \n",
+              "2      Glute Bridge     [gain strength, recovery, maintain fitness]   \n",
+              "3   Incline Push-Up  [gain strength, maintain fitness, lose weight]   \n",
+              "4     Forearm Plank  [gain strength, maintain fitness, lose weight]   \n",
+              "\n",
+              "    equipment     level  muscle impact                     avoid_if sets  \\\n",
+              "0  bodyweight  beginner  cardio    low                           []    1   \n",
+              "1  bodyweight  beginner    legs    low                  [knee pain]  2-3   \n",
+              "2  bodyweight  beginner  glutes    low                           []  2-3   \n",
+              "3  bodyweight  beginner   chest    low  [shoulder pain, wrist pain]  2-3   \n",
+              "4  bodyweight  beginner    core    low   [back pain, shoulder pain]  2-3   \n",
+              "\n",
+              "        reps       rest  \n",
+              "0  20-30 min  as needed  \n",
+              "1      10-15     60 sec  \n",
+              "2      12-15     45 sec  \n",
+              "3       8-12     60 sec  \n",
+              "4  20-40 sec     45 sec  "
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-03ce075d-2dbb-42d4-b9d9-0f76589f09b6\" class=\"colab-df-container\">\n",
+              "    <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>name</th>\n",
+              "      <th>goals</th>\n",
+              "      <th>equipment</th>\n",
+              "      <th>level</th>\n",
+              "      <th>muscle</th>\n",
+              "      <th>impact</th>\n",
+              "      <th>avoid_if</th>\n",
+              "      <th>sets</th>\n",
+              "      <th>reps</th>\n",
+              "      <th>rest</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>0</th>\n",
+              "      <td>Brisk Walk</td>\n",
+              "      <td>[lose weight, maintain fitness, recovery]</td>\n",
+              "      <td>bodyweight</td>\n",
+              "      <td>beginner</td>\n",
+              "      <td>cardio</td>\n",
+              "      <td>low</td>\n",
+              "      <td>[]</td>\n",
+              "      <td>1</td>\n",
+              "      <td>20-30 min</td>\n",
+              "      <td>as needed</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>1</th>\n",
+              "      <td>Bodyweight Squat</td>\n",
+              "      <td>[gain strength, maintain fitness, lose weight]</td>\n",
+              "      <td>bodyweight</td>\n",
+              "      <td>beginner</td>\n",
+              "      <td>legs</td>\n",
+              "      <td>low</td>\n",
+              "      <td>[knee pain]</td>\n",
+              "      <td>2-3</td>\n",
+              "      <td>10-15</td>\n",
+              "      <td>60 sec</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2</th>\n",
+              "      <td>Glute Bridge</td>\n",
+              "      <td>[gain strength, recovery, maintain fitness]</td>\n",
+              "      <td>bodyweight</td>\n",
+              "      <td>beginner</td>\n",
+              "      <td>glutes</td>\n",
+              "      <td>low</td>\n",
+              "      <td>[]</td>\n",
+              "      <td>2-3</td>\n",
+              "      <td>12-15</td>\n",
+              "      <td>45 sec</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>3</th>\n",
+              "      <td>Incline Push-Up</td>\n",
+              "      <td>[gain strength, maintain fitness, lose weight]</td>\n",
+              "      <td>bodyweight</td>\n",
+              "      <td>beginner</td>\n",
+              "      <td>chest</td>\n",
+              "      <td>low</td>\n",
+              "      <td>[shoulder pain, wrist pain]</td>\n",
+              "      <td>2-3</td>\n",
+              "      <td>8-12</td>\n",
+              "      <td>60 sec</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>4</th>\n",
+              "      <td>Forearm Plank</td>\n",
+              "      <td>[gain strength, maintain fitness, lose weight]</td>\n",
+              "      <td>bodyweight</td>\n",
+              "      <td>beginner</td>\n",
+              "      <td>core</td>\n",
+              "      <td>low</td>\n",
+              "      <td>[back pain, shoulder pain]</td>\n",
+              "      <td>2-3</td>\n",
+              "      <td>20-40 sec</td>\n",
+              "      <td>45 sec</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "    <div class=\"colab-df-buttons\">\n",
+              "\n",
+              "  <div class=\"colab-df-container\">\n",
+              "    <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-03ce075d-2dbb-42d4-b9d9-0f76589f09b6')\"\n",
+              "            title=\"Convert this dataframe to an interactive table.\"\n",
+              "            style=\"display:none;\">\n",
+              "\n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\" viewBox=\"0 -960 960 960\">\n",
+              "    <path d=\"M120-120v-720h720v720H120Zm60-500h600v-160H180v160Zm220 220h160v-160H400v160Zm0 220h160v-160H400v160ZM180-400h160v-160H180v160Zm440 0h160v-160H620v160ZM180-180h160v-160H180v160Zm440 0h160v-160H620v160Z\"/>\n",
+              "  </svg>\n",
+              "    </button>\n",
+              "\n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-buttons div {\n",
+              "      margin-bottom: 4px;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "    <script>\n",
+              "      const buttonEl =\n",
+              "        document.querySelector('#df-03ce075d-2dbb-42d4-b9d9-0f76589f09b6 button.colab-df-convert');\n",
+              "      buttonEl.style.display =\n",
+              "        google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "      async function convertToInteractive(key) {\n",
+              "        const element = document.querySelector('#df-03ce075d-2dbb-42d4-b9d9-0f76589f09b6');\n",
+              "        const dataTable =\n",
+              "          await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                    [key], {});\n",
+              "        if (!dataTable) return;\n",
+              "\n",
+              "        const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "          '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "          + ' to learn more about interactive tables.';\n",
+              "        element.innerHTML = '';\n",
+              "        dataTable['output_type'] = 'display_data';\n",
+              "        await google.colab.output.renderOutput(dataTable, element);\n",
+              "        const docLink = document.createElement('div');\n",
+              "        docLink.innerHTML = docLinkHtml;\n",
+              "        element.appendChild(docLink);\n",
+              "      }\n",
+              "    </script>\n",
+              "  </div>\n",
+              "\n",
+              "\n",
+              "    </div>\n",
+              "  </div>\n"
+            ],
+            "application/vnd.google.colaboratory.intrinsic+json": {
+              "type": "dataframe",
+              "variable_name": "exercise_df",
+              "summary": "{\n  \"name\": \"exercise_df\",\n  \"rows\": 18,\n  \"fields\": [\n    {\n      \"column\": \"name\",\n      \"properties\": {\n        \"dtype\": \"string\",\n        \"num_unique_values\": 18,\n        \"samples\": [\n          \"Brisk Walk\",\n          \"Bodyweight Squat\",\n          \"Dumbbell Floor Press\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"goals\",\n      \"properties\": {\n        \"dtype\": \"object\",\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"equipment\",\n      \"properties\": {\n        \"dtype\": \"category\",\n        \"num_unique_values\": 4,\n        \"samples\": [\n          \"dumbbells\",\n          \"resistance bands\",\n          \"bodyweight\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"level\",\n      \"properties\": {\n        \"dtype\": \"category\",\n        \"num_unique_values\": 1,\n        \"samples\": [\n          \"beginner\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"muscle\",\n      \"properties\": {\n        \"dtype\": \"string\",\n        \"num_unique_values\": 9,\n        \"samples\": [\n          \"mobility\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"impact\",\n      \"properties\": {\n        \"dtype\": \"category\",\n        \"num_unique_values\": 1,\n        \"samples\": [\n          \"low\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"avoid_if\",\n      \"properties\": {\n        \"dtype\": \"object\",\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"sets\",\n      \"properties\": {\n        \"dtype\": \"category\",\n        \"num_unique_values\": 5,\n        \"samples\": [\n          \"2-3\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"reps\",\n      \"properties\": {\n        \"dtype\": \"string\",\n        \"num_unique_values\": 9,\n        \"samples\": [\n          \"8-10\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"rest\",\n      \"properties\": {\n        \"dtype\": \"category\",\n        \"num_unique_values\": 6,\n        \"samples\": [\n          \"as needed\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    }\n  ]\n}"
+            }
+          },
+          "metadata": {},
+          "execution_count": 7
+        }
+      ],
+      "source": [
+        "EXERCISES = [\n",
+        "    {'name':'Brisk Walk','goals':['lose weight','maintain fitness','recovery'],'equipment':'bodyweight','level':'beginner','muscle':'cardio','impact':'low','avoid_if':[],'sets':'1','reps':'20-30 min','rest':'as needed'},\n",
+        "    {'name':'Bodyweight Squat','goals':['gain strength','maintain fitness','lose weight'],'equipment':'bodyweight','level':'beginner','muscle':'legs','impact':'low','avoid_if':['knee pain'],'sets':'2-3','reps':'10-15','rest':'60 sec'},\n",
+        "    {'name':'Glute Bridge','goals':['gain strength','recovery','maintain fitness'],'equipment':'bodyweight','level':'beginner','muscle':'glutes','impact':'low','avoid_if':[],'sets':'2-3','reps':'12-15','rest':'45 sec'},\n",
+        "    {'name':'Incline Push-Up','goals':['gain strength','maintain fitness','lose weight'],'equipment':'bodyweight','level':'beginner','muscle':'chest','impact':'low','avoid_if':['shoulder pain','wrist pain'],'sets':'2-3','reps':'8-12','rest':'60 sec'},\n",
+        "    {'name':'Forearm Plank','goals':['gain strength','maintain fitness','lose weight'],'equipment':'bodyweight','level':'beginner','muscle':'core','impact':'low','avoid_if':['back pain','shoulder pain'],'sets':'2-3','reps':'20-40 sec','rest':'45 sec'},\n",
+        "    {'name':'Dumbbell Goblet Squat','goals':['gain strength','lose weight','maintain fitness'],'equipment':'dumbbells','level':'beginner','muscle':'legs','impact':'low','avoid_if':['knee pain'],'sets':'3','reps':'8-12','rest':'75 sec'},\n",
+        "    {'name':'Dumbbell Romanian Deadlift','goals':['gain strength','maintain fitness'],'equipment':'dumbbells','level':'beginner','muscle':'hamstrings/glutes','impact':'low','avoid_if':['back pain'],'sets':'3','reps':'8-12','rest':'75 sec'},\n",
+        "    {'name':'One-Arm Dumbbell Row','goals':['gain strength','maintain fitness'],'equipment':'dumbbells','level':'beginner','muscle':'back','impact':'low','avoid_if':[],'sets':'3','reps':'10 each side','rest':'60 sec'},\n",
+        "    {'name':'Dumbbell Floor Press','goals':['gain strength','maintain fitness'],'equipment':'dumbbells','level':'beginner','muscle':'chest','impact':'low','avoid_if':['shoulder pain'],'sets':'3','reps':'8-12','rest':'75 sec'},\n",
+        "    {'name':'Bike Intervals','goals':['lose weight','build endurance'],'equipment':'gym','level':'beginner','muscle':'cardio','impact':'low','avoid_if':[],'sets':'6 rounds','reps':'1 min hard / 1 min easy','rest':'built in'},\n",
+        "    {'name':'Lat Pulldown','goals':['gain strength','maintain fitness'],'equipment':'gym','level':'beginner','muscle':'back','impact':'low','avoid_if':['shoulder pain'],'sets':'3','reps':'8-12','rest':'75 sec'},\n",
+        "    {'name':'Chest Press Machine','goals':['gain strength','maintain fitness'],'equipment':'gym','level':'beginner','muscle':'chest','impact':'low','avoid_if':['shoulder pain'],'sets':'3','reps':'8-12','rest':'75 sec'},\n",
+        "    {'name':'Resistance Band Row','goals':['gain strength','maintain fitness'],'equipment':'resistance bands','level':'beginner','muscle':'back','impact':'low','avoid_if':[],'sets':'2-3','reps':'12-15','rest':'45 sec'},\n",
+        "    {'name':'Band Chest Press','goals':['gain strength','maintain fitness'],'equipment':'resistance bands','level':'beginner','muscle':'chest','impact':'low','avoid_if':['shoulder pain'],'sets':'2-3','reps':'10-15','rest':'45 sec'},\n",
+        "    {'name':'Band Squat','goals':['gain strength','lose weight','maintain fitness'],'equipment':'resistance bands','level':'beginner','muscle':'legs','impact':'low','avoid_if':['knee pain'],'sets':'2-3','reps':'10-15','rest':'60 sec'},\n",
+        "    {'name':'Cat-Cow Stretch','goals':['recovery','maintain fitness'],'equipment':'bodyweight','level':'beginner','muscle':'mobility','impact':'low','avoid_if':[],'sets':'2','reps':'8-10','rest':'none'},\n",
+        "    {'name':'Dead Bug','goals':['recovery','gain strength','maintain fitness'],'equipment':'bodyweight','level':'beginner','muscle':'core','impact':'low','avoid_if':[],'sets':'2-3','reps':'8 each side','rest':'45 sec'},\n",
+        "    {'name':'Bird Dog','goals':['recovery','gain strength','maintain fitness'],'equipment':'bodyweight','level':'beginner','muscle':'core/back','impact':'low','avoid_if':[],'sets':'2-3','reps':'8 each side','rest':'45 sec'}\n",
+        "]\n",
+        "exercise_df = pd.DataFrame(EXERCISES)\n",
+        "exercise_df.head()\n"
+      ],
+      "id": "r34v9jNTPlja"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "iOwEeljwPljb"
+      },
+      "source": [
+        "## Cell 13 — Workout Function Section\n",
+        "\n",
+        "“This section is where FitBot starts acting like a personal trainer. It uses the exercise database and user inputs to build a complete personalized workout plan.”\n",
+        "\n",
+        "This section introduces the core recommendation functions. These functions connect the exercise knowledge base, user profile information, and calorie prediction model into one workout recommendation system.\n",
+        "\n",
+        "The system filters exercises, checks limitations, balances the workout across cardio, strength, and core movements, predicts calories, and returns a complete text-based plan."
+      ],
+      "id": "iOwEeljwPljb"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "SgeJUeICPljb"
+      },
+      "source": [
+        "## Cell 14 — Filter Exercises, Predict Calories, and Generate Workout Plans\n",
+        "\n",
+        "“This cell is the main recommendation engine. It filters exercises based on the user’s needs, avoids unsafe movements, creates a balanced workout, predicts calories with the trained model, and returns a full personalized plan.”\n",
+        "\n",
+        "This cell defines the main workout recommendation logic. `LEVEL_RANK` assigns a numeric difficulty ranking to beginner, intermediate, and advanced levels. The `allowed_by_level()` function makes sure the user only receives exercises appropriate for their experience level.\n",
+        "\n",
+        "The `limitation_matches()` function checks whether an exercise should be avoided because of user limitations such as knee pain, shoulder pain, wrist pain, or back pain. The `filter_exercises()` function then filters the exercise database by goal, equipment, experience level, limitations, and recovery status.\n",
+        "\n",
+        "The `select_balanced_workout()` function chooses a balanced set of exercises. For example, a weight-loss workout may include cardio, legs, upper body, and core. A recovery workout focuses more on mobility and low-impact movement.\n",
+        "\n",
+        "The calorie prediction helper builds a one-row input sample using the same engineered features as the training data, then sends it through the trained model. Finally, `recommend_workout()` combines everything into a readable workout plan with estimated calories, activity classification, selected exercises, and safety notes."
+      ],
+      "id": "SgeJUeICPljb"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 8,
+      "metadata": {
+        "id": "SNzQ2FIiPljb"
+      },
+      "outputs": [],
+      "source": [
+        "LEVEL_RANK = {'beginner':1, 'intermediate':2, 'advanced':3}\n",
+        "def allowed_by_level(exercise_level, user_level): return LEVEL_RANK[exercise_level] <= LEVEL_RANK[user_level]\n",
+        "def limitation_matches(exercise, limitations):\n",
+        "    text = limitations.lower().strip()\n",
+        "    if text in ['none','no','n/a','']: return False\n",
+        "    return any(lim in text for lim in exercise['avoid_if'])\n",
+        "def filter_exercises(goal, equipment, experience_level, limitations, recovery=False):\n",
+        "    available_equipment = [equipment.lower(), 'bodyweight']\n",
+        "    if recovery: goal = 'recovery'\n",
+        "    matches = []\n",
+        "    for ex in EXERCISES:\n",
+        "        if goal not in ex['goals']: continue\n",
+        "        if ex['equipment'] not in available_equipment: continue\n",
+        "        if not allowed_by_level(ex['level'], experience_level): continue\n",
+        "        if limitation_matches(ex, limitations): continue\n",
+        "        matches.append(ex)\n",
+        "    if not matches:\n",
+        "        matches = [ex for ex in EXERCISES if ex['name'] in ['Brisk Walk','Glute Bridge','Dead Bug','Bird Dog','Cat-Cow Stretch']]\n",
+        "    return matches\n",
+        "def select_balanced_workout(goal, equipment, experience_level, limitations, steps, active_minutes):\n",
+        "    recovery = steps < 3500 or active_minutes < 10 or goal == 'recovery'\n",
+        "    pool = filter_exercises(goal, equipment, experience_level, limitations, recovery)\n",
+        "    cardio = [ex for ex in pool if 'cardio' in ex['muscle']]\n",
+        "    legs = [ex for ex in pool if ex['muscle'] in ['legs','glutes','hamstrings/glutes']]\n",
+        "    upper = [ex for ex in pool if ex['muscle'] in ['chest','back']]\n",
+        "    core = [ex for ex in pool if 'core' in ex['muscle'] or 'mobility' in ex['muscle']]\n",
+        "    selected=[]\n",
+        "    def add_from(group, count):\n",
+        "        random.shuffle(group)\n",
+        "        for ex in group[:count]:\n",
+        "            if ex not in selected: selected.append(ex)\n",
+        "    if recovery: add_from(core,3); add_from(cardio,1)\n",
+        "    elif goal == 'lose weight': add_from(cardio,1); add_from(legs,1); add_from(upper,1); add_from(core,1)\n",
+        "    elif goal == 'gain strength': add_from(legs,2); add_from(upper,2); add_from(core,1)\n",
+        "    elif goal == 'build endurance': add_from(cardio,2); add_from(legs,1); add_from(core,1)\n",
+        "    else: add_from(cardio,1); add_from(legs,1); add_from(upper,1); add_from(core,1)\n",
+        "    for ex in pool:\n",
+        "        if len(selected) >= 5: break\n",
+        "        if ex not in selected: selected.append(ex)\n",
+        "    return selected[:5], recovery\n",
+        "def build_activity_input(steps, active_minutes, sedentary_minutes):\n",
+        "    very = int(active_minutes*.25); fairly = int(active_minutes*.20); lightly = max(int(active_minutes)-very-fairly,0)\n",
+        "    row = pd.DataFrame([{'Id':0, 'ActivityDate':pd.Timestamp.today(), 'TotalSteps':int(steps), 'VeryActiveMinutes':very, 'FairlyActiveMinutes':fairly, 'LightlyActiveMinutes':lightly, 'SedentaryMinutes':int(sedentary_minutes), 'Calories':0}])\n",
+        "    return engineer_features(row)\n",
+        "def predict_calories_from_activity(steps, active_minutes, sedentary_minutes):\n",
+        "    row = build_activity_input(steps, active_minutes, sedentary_minutes)\n",
+        "    return int(calorie_model.predict(row[FEATURES])[0])\n",
+        "def recommend_workout(goal, equipment, experience_level, limitations, steps, active_minutes, sedentary_minutes, workout_minutes):\n",
+        "    activity_row = build_activity_input(steps, active_minutes, sedentary_minutes)\n",
+        "    predicted_calories = int(calorie_model.predict(activity_row[FEATURES])[0])\n",
+        "    selected, recovery = select_balanced_workout(goal, equipment, experience_level, limitations, int(steps), int(active_minutes))\n",
+        "    step_gap = max(10000 - int(steps), 0)\n",
+        "    if recovery:\n",
+        "        title='Recovery Workout Recommendation'; warmup='3-5 minutes easy walking and gentle mobility'; cooldown='5 minutes stretching and slow breathing'\n",
+        "    elif goal == 'lose weight':\n",
+        "        title='Weight Loss Workout Recommendation'; warmup='5 minutes brisk walking or marching in place'; cooldown='5 minutes easy walking and stretching'\n",
+        "    elif goal == 'gain strength':\n",
+        "        title='Strength Workout Recommendation'; warmup='5 minutes mobility and light warm-up sets'; cooldown='5 minutes stretching the muscles trained'\n",
+        "    elif goal == 'build endurance':\n",
+        "        title='Endurance Workout Recommendation'; warmup='5 minutes easy cardio'; cooldown='5 minutes slow walking and breathing'\n",
+        "    else:\n",
+        "        title='Balanced Fitness Workout Recommendation'; warmup='5 minutes easy cardio and mobility'; cooldown='5 minutes full-body stretching'\n",
+        "    response=[title,'',f'Estimated calories burned today: {predicted_calories}',f'Steps: {int(steps):,}',f'Active minutes: {int(active_minutes)}',f'Workout time available: {int(workout_minutes)} minutes','', 'Warm-Up:', f'- {warmup}', '', 'Main Workout:']\n",
+        "    for i, ex in enumerate(selected,1): response.append(f\"{i}. {ex['name']} — {ex['sets']} sets, {ex['reps']}, rest {ex['rest']}\")\n",
+        "    response += ['', 'Cooldown:', f'- {cooldown}', '']\n",
+        "    response.append(f'Step Guidance: You are {step_gap:,} steps below 10,000. Add a short walk later if you feel good.' if step_gap > 0 else 'Step Guidance: You reached 10,000 steps, so no extra cardio is needed today.')\n",
+        "    response.append('Sedentary Guidance: Add 2-3 short movement breaks during the day.' if int(sedentary_minutes) > 900 else 'Sedentary Guidance: Your sedentary time is manageable today.')\n",
+        "    if limitations.lower() not in ['none','no','n/a','']: response.append(f\"Safety Note: Because you listed '{limitations}', avoid painful movements and reduce intensity if needed.\")\n",
+        "    response += ['', 'Progression: If this workout feels easy for two sessions, add one set or 5 extra minutes next time.']\n",
+        "    return '\\n'.join(response)\n"
+      ],
+      "id": "SNzQ2FIiPljb"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "mos4If5pPljb"
+      },
+      "source": [
+        "## Cell 15 — Memory Agent Section\n",
+        "\n",
+        "“This section adds memory. FitBot can save user check-ins and later produce a progress report, which makes it feel more like a real assistant instead of a one-time calculator.”\n",
+        "\n",
+        "This section introduces FitBot’s memory system. A basic AI assistant only responds to one prompt at a time, but an agent with memory can track previous check-ins and summarize progress over time.\n",
+        "\n",
+        "This memory system works without an API key, which makes it useful as a fallback assistant even when the LangChain LLM agent is not active."
+      ],
+      "id": "mos4If5pPljb"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "9lzzL0dNPljb"
+      },
+      "source": [
+        "## Cell 16 — Create the User Profile and FitBot Memory Agent\n",
+        "\n",
+        "“This cell creates the memory-based version of FitBot. It stores the user’s profile and workout history, generates responses, and can summarize progress after multiple check-ins.”\n",
+        "\n",
+        "This cell uses Python dataclasses to create a `UserProfile`. The profile stores the user’s name, goal, equipment, experience level, limitations, and workout history. The history list is important because it stores each check-in over time.\n",
+        "\n",
+        "The `FitBotWorkoutAgent` class manages the user profile and responses. The `update_profile()` method saves the latest goal and preferences. The `respond()` method decides whether the user is asking for a workout or a progress report. If the user asks for progress or history, the agent calls `progress_report()`. Otherwise, it generates a workout recommendation and saves the check-in to memory.\n",
+        "\n",
+        "The `progress_report()` method summarizes saved history by reporting check-in count, average steps, average active minutes, and most common goal."
+      ],
+      "id": "9lzzL0dNPljb"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 9,
+      "metadata": {
+        "id": "6CvTzWuoPljb"
+      },
+      "outputs": [],
+      "source": [
+        "@dataclass\n",
+        "class UserProfile:\n",
+        "    name: str = 'Y. Powell'\n",
+        "    goal: str = 'maintain fitness'\n",
+        "    equipment: str = 'bodyweight'\n",
+        "    experience_level: str = 'beginner'\n",
+        "    limitations: str = 'none'\n",
+        "    history: List[Dict[str, Any]] = field(default_factory=list)\n",
+        "class FitBotWorkoutAgent:\n",
+        "    def __init__(self): self.profile = UserProfile()\n",
+        "    def update_profile(self, goal, equipment, experience_level, limitations):\n",
+        "        self.profile.goal=goal; self.profile.equipment=equipment; self.profile.experience_level=experience_level; self.profile.limitations=limitations\n",
+        "    def respond(self, message, goal, equipment, experience_level, limitations, steps, active_minutes, sedentary_minutes, workout_minutes):\n",
+        "        self.update_profile(goal, equipment, experience_level, limitations)\n",
+        "        if 'progress' in message.lower() or 'history' in message.lower(): return self.progress_report()\n",
+        "        workout = recommend_workout(goal, equipment, experience_level, limitations, int(steps), int(active_minutes), int(sedentary_minutes), int(workout_minutes))\n",
+        "        self.profile.history.append({'goal':goal, 'steps':int(steps), 'active_minutes':int(active_minutes), 'sedentary_minutes':int(sedentary_minutes), 'workout_minutes':int(workout_minutes)})\n",
+        "        return workout\n",
+        "    def progress_report(self):\n",
+        "        if not self.profile.history: return 'No workout history yet. Complete a few check-ins first.'\n",
+        "        df = pd.DataFrame(self.profile.history)\n",
+        "        return f\"Progress Report\\n\\n- Check-ins saved: {len(df)}\\n- Average steps: {int(df.steps.mean()):,}\\n- Average active minutes: {int(df.active_minutes.mean())}\\n- Most common goal: {df.goal.mode()[0]}\\n\\nNext step: repeat the workout that matched your goal best, then increase either time or one set next week.\"\n",
+        "fitbot_memory_agent = FitBotWorkoutAgent()\n"
+      ],
+      "id": "6CvTzWuoPljb"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "1ckOXQYaPljc"
+      },
+      "source": [
+        "## Cell 17 — LangChain Tools Section\n",
+        "\n",
+        "“This section connects my Python logic to LangChain. By wrapping FitBot functions as tools, a language model can decide which function to call based on the user’s request.”\n",
+        "\n",
+        "This section introduces the LangChain tool layer. LangChain tools are Python functions wrapped in a format that an LLM agent can understand and call when needed.\n",
+        "\n",
+        "Instead of only generating text, the LLM can call FitBot’s real functions, such as recommending a workout, predicting calories, or showing progress. This is what makes the system more agent-like."
+      ],
+      "id": "1ckOXQYaPljc"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "HLQDGnj8Pljc"
+      },
+      "source": [
+        "## Cell 18 — Wrap FitBot Functions as LangChain Tools\n",
+        "\n",
+        "“This cell makes FitBot LangChain-ready. It wraps the project’s functions as tools so an LLM agent can call them. I also used error handling so the notebook still works even if LangChain is not installed.”\n",
+        "\n",
+        "This cell attempts to import LangChain’s `tool` decorator. If LangChain is installed, three FitBot functions are wrapped as tools: `recommend_fitbot_workout`, `predict_fitbot_calories`, and `show_fitbot_progress`.\n",
+        "\n",
+        "The recommendation tool returns a personalized workout plan. The calorie prediction tool uses the trained machine learning model to estimate calories burned. The progress tool returns the saved memory report from the fallback agent.\n",
+        "\n",
+        "The cell uses a try/except block so the notebook does not crash if LangChain is missing. If LangChain is available, `LANGCHAIN_TOOLS_READY` is set to True. If not, the notebook prints a helpful message and continues running with the fallback agent."
+      ],
+      "id": "HLQDGnj8Pljc"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 10,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "VTW-wg5aPljc",
+        "outputId": "b3d1fd47-7ad4-4f42-e8d3-ac5ee829e1ef"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "LangChain tools created successfully.\n"
+          ]
+        }
+      ],
+      "source": [
+        "try:\n",
+        "    from langchain.tools import tool\n",
+        "    @tool\n",
+        "    def recommend_fitbot_workout(goal: str, equipment: str, experience_level: str, limitations: str, steps: int, active_minutes: int, sedentary_minutes: int, workout_minutes: int) -> str:\n",
+        "        \"\"\"Recommend a personalized workout plan based on user goal, equipment, experience, limitations, and activity data.\"\"\"\n",
+        "        return recommend_workout(goal, equipment, experience_level, limitations, steps, active_minutes, sedentary_minutes, workout_minutes)\n",
+        "    @tool\n",
+        "    def predict_fitbot_calories(steps: int, active_minutes: int, sedentary_minutes: int) -> str:\n",
+        "        \"\"\"Predict estimated calories burned using the trained FitBot calorie model.\"\"\"\n",
+        "        return f'Estimated calories burned: {predict_calories_from_activity(steps, active_minutes, sedentary_minutes)}'\n",
+        "    @tool\n",
+        "    def show_fitbot_progress() -> str:\n",
+        "        \"\"\"Show the user's saved FitBot progress report.\"\"\"\n",
+        "        return fitbot_memory_agent.progress_report()\n",
+        "    tools = [recommend_fitbot_workout, predict_fitbot_calories, show_fitbot_progress]\n",
+        "    LANGCHAIN_TOOLS_READY = True\n",
+        "    print('LangChain tools created successfully.')\n",
+        "except Exception as e:\n",
+        "    tools = []\n",
+        "    LANGCHAIN_TOOLS_READY = False\n",
+        "    print('LangChain tools not ready. Install LangChain first.')\n",
+        "    print(e)\n"
+      ],
+      "id": "VTW-wg5aPljc"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "AZR85gO0Pljc"
+      },
+      "source": [
+        "## Cell 19 — LangChain Agent Section\n",
+        "\n",
+        "“This section is optional because it requires an API key. I removed the key from the notebook for security, but the architecture is ready for LangChain tool-calling if a key is added.”\n",
+        "\n",
+        "This section introduces the optional LangChain agent. The agent requires an OpenAI API key because it uses an LLM to interpret user requests and choose which tool to call.\n",
+        "\n",
+        "The notebook is designed safely so the API key is not included in the code. The user can add their own key in Colab if they want to activate the LLM version."
+      ],
+      "id": "AZR85gO0Pljc"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "IEoTEaQzPljc"
+      },
+      "source": [
+        "## Cell 20 — Create LangChain LLM Agent\n",
+        "\n",
+        "“This cell creates LLM-powered FitBot agent. The model can use FitBot’s tools based on the user’s request, but the notebook protects my API key by requiring it to be added separately in the environment.”\n",
+        "\n",
+        "This cell checks whether LangChain tools are ready and whether an OpenAI API key exists in the environment. If both conditions are true, it imports `ChatOpenAI` and creates a LangChain agent.\n",
+        "\n",
+        "The system prompt tells the agent how to behave as FitBot. It instructs the model to use the workout tool for workout requests, the calorie tool for calorie questions, and the progress tool for history questions. It also includes a safety instruction telling the assistant to keep advice practical and avoid medical advice.\n",
+        "\n",
+        "If no API key is found, the cell prints a message explaining that the LangChain agent was not created. This prevents errors and keeps the notebook usable without paid API access."
+      ],
+      "id": "IEoTEaQzPljc"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 11,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "ZruEeeosPljc",
+        "outputId": "a4d3b052-6fcd-4e4e-f29c-fb21de19f0fc"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "LangChain agent not created. Add OPENAI_API_KEY to enable LLM tool-calling.\n"
+          ]
+        }
+      ],
+      "source": [
+        "# Add API key in Colab:\n",
+        "# os.environ['OPENAI_API_KEY'] = 'YOUR_API_KEY_HERE'\n",
+        "fitbot_langchain_agent = None\n",
+        "if LANGCHAIN_TOOLS_READY and os.environ.get('OPENAI_API_KEY'):\n",
+        "    try:\n",
+        "        from langchain_openai import ChatOpenAI\n",
+        "        from langchain.agents import create_agent\n",
+        "        llm = ChatOpenAI(model='gpt-4o-mini', temperature=0.3)\n",
+        "        system_prompt = '''You are FitBot, an AI personal trainer agent. Use recommend_fitbot_workout for workout requests, predict_fitbot_calories for calorie questions, and show_fitbot_progress for progress/history questions. Keep advice practical and safe. Do not provide medical advice.'''\n",
+        "        fitbot_langchain_agent = create_agent(model=llm, tools=tools, system_prompt=system_prompt)\n",
+        "        print('LangChain FitBot agent created successfully.')\n",
+        "    except Exception as e:\n",
+        "        print('Could not create LangChain agent:', e)\n",
+        "else:\n",
+        "    print('LangChain agent not created. Add OPENAI_API_KEY to enable LLM tool-calling.')\n"
+      ],
+      "id": "ZruEeeosPljc"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "uN-FMvD0Pljc"
+      },
+      "source": [
+        "## Cell 21 — Fallback Agent Test Section\n",
+        "\n",
+        "“This section tests the no-API version of the assistant. Even without an LLM, FitBot can still generate a personalized workout using the logic built earlier.”\n",
+        "\n",
+        "This section tests the version of FitBot that works without an API key. This is important because it proves the project has a working core even if the optional LangChain agent is not activated.\n",
+        "\n",
+        "The fallback agent still uses the same workout recommendation logic, calorie model, and memory system."
+      ],
+      "id": "uN-FMvD0Pljc"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "r1VzAK_yPljd"
+      },
+      "source": [
+        "## Cell 22 — Test the Fallback FitBot Agent\n",
+        "\n",
+        "“This cell is the first real demo. It sends FitBot a realistic user situation and prints a complete workout recommendation. It also saves the check-in to memory for future progress reports.”\n",
+        "\n",
+        "This cell sends a sample request into the fallback memory agent. The sample user wants to lose weight, only has bodyweight equipment, is a beginner, has no limitations, and recorded 4,200 steps, 18 active minutes, 980 sedentary minutes, and 30 available workout minutes.\n",
+        "\n",
+        "The agent processes the request, updates the user profile, generates a personalized workout, predicts calories, and saves the check-in to memory. The `print()` statement displays the assistant’s response so the result can be reviewed."
+      ],
+      "id": "r1VzAK_yPljd"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 12,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "qKJ5BwTUPljd",
+        "outputId": "e7ae3aac-ae18-43b2-c811-023eebb4b5e3"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Weight Loss Workout Recommendation\n",
+            "\n",
+            "Estimated calories burned today: 1798\n",
+            "Steps: 4,200\n",
+            "Active minutes: 18\n",
+            "Workout time available: 30 minutes\n",
+            "\n",
+            "Warm-Up:\n",
+            "- 5 minutes brisk walking or marching in place\n",
+            "\n",
+            "Main Workout:\n",
+            "1. Brisk Walk — 1 sets, 20-30 min, rest as needed\n",
+            "2. Bodyweight Squat — 2-3 sets, 10-15, rest 60 sec\n",
+            "3. Incline Push-Up — 2-3 sets, 8-12, rest 60 sec\n",
+            "4. Forearm Plank — 2-3 sets, 20-40 sec, rest 45 sec\n",
+            "\n",
+            "Cooldown:\n",
+            "- 5 minutes easy walking and stretching\n",
+            "\n",
+            "Step Guidance: You are 5,800 steps below 10,000. Add a short walk later if you feel good.\n",
+            "Sedentary Guidance: Add 2-3 short movement breaks during the day.\n",
+            "\n",
+            "Progression: If this workout feels easy for two sessions, add one set or 5 extra minutes next time.\n"
+          ]
+        }
+      ],
+      "source": [
+        "print(fitbot_memory_agent.respond('Recommend a workout', 'lose weight', 'bodyweight', 'beginner', 'none', 4200, 18, 980, 30))\n"
+      ],
+      "id": "qKJ5BwTUPljd"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "vR2vtEMsPljd"
+      },
+      "source": [
+        "## Cell 23 — LangChain Agent Test Section\n",
+        "\n",
+        "“This section tests the LLM tool-calling version. If the API key is active, the user can type a natural language request and the LangChain agent can call the correct FitBot tool.”\n",
+        "\n",
+        "This section tests the optional LangChain version of the assistant. It only runs if the LangChain agent was created successfully in the previous cells.\n",
+        "\n",
+        "This test shows how a natural language prompt can be passed to an LLM agent, which then decides which FitBot tool to use."
+      ],
+      "id": "vR2vtEMsPljd"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "GJkyxXn2Pljd"
+      },
+      "source": [
+        "## Cell 24 — Test the LangChain Tool-Calling Agent\n",
+        "\n",
+        "“This cell demonstrates the LangChain architecture. The user writes a regular prompt, and the LLM agent can decide to call the FitBot workout tool instead of only guessing an answer.”\n",
+        "\n",
+        "This cell checks whether `fitbot_langchain_agent` exists. If it does, the code sends a natural language workout request to the agent. The request includes the user’s goal, equipment, experience level, limitations, steps, active minutes, sedentary minutes, and workout time.\n",
+        "\n",
+        "The LangChain agent should interpret the request, select the workout recommendation tool, call the function, and return the final response. If the agent is not active, the cell prints a message telling the user to either use the fallback agent or add an API key and rerun the setup."
+      ],
+      "id": "GJkyxXn2Pljd"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 13,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "PYWI-9PgPljd",
+        "outputId": "2e2316f6-8796-4899-f0ff-a7745734d22f"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "LangChain agent is not active. Use Cell 10 or add an API key and rerun Cell 9.\n"
+          ]
+        }
+      ],
+      "source": [
+        "if fitbot_langchain_agent is not None:\n",
+        "    response = fitbot_langchain_agent.invoke({'messages':[{'role':'user','content':'I want to lose weight. I only have bodyweight equipment. I am a beginner with no injuries. Today I got 4200 steps, 18 active minutes, and 980 sedentary minutes. I have 30 minutes. Please recommend a workout.'}]})\n",
+        "    print(response['messages'][-1].content)\n",
+        "else:\n",
+        "    print('LangChain agent is not active. Use Cell 10 or add an API key and rerun Cell 9.')\n"
+      ],
+      "id": "PYWI-9PgPljd"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "98goJtiOPljd"
+      },
+      "source": [
+        "## Cell 25 — Optional Gradio Interface Section\n",
+        "\n",
+        "“This section turns the notebook into a simple app. Gradio lets users enter their fitness information through a web interface and receive FitBot’s response.”\n",
+        "\n",
+        "This section introduces the optional web interface. Gradio allows the project to become an interactive app instead of only a notebook.\n",
+        "\n",
+        "The interface gives users text boxes, dropdowns, and number inputs so they can interact with FitBot more easily. This is useful for demonstrations because it makes the AI assistant look and feel like a real application."
+      ],
+      "id": "98goJtiOPljd"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "qAmDXQCGPlje"
+      },
+      "source": [
+        "## Cell 26 — Launch the Optional Gradio FitBot App\n",
+        "\n",
+        "“This final cell creates the optional app version of FitBot. Instead of typing directly into code cells, users can interact with the AI assistant through dropdowns and text boxes.”\n",
+        "\n",
+        "This cell tries to import Gradio and then defines a `fitbot_interface()` function. The interface function takes user inputs from the app, passes them into the fallback FitBot memory agent, and returns the generated workout response.\n",
+        "\n",
+        "The Gradio interface includes inputs for the user message, fitness goal, equipment, experience level, limitations, steps, active minutes, sedentary minutes, and available workout time. The output is a large text box showing FitBot’s response.\n",
+        "\n",
+        "The cell uses a try/except block so the notebook does not fail if Gradio is not installed. If Gradio is available, `demo.launch(share=True)` starts the app and creates a shareable link in Colab."
+      ],
+      "id": "qAmDXQCGPlje"
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 14,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 609
+        },
+        "id": "mAqetReHPlje",
+        "outputId": "4a6c2394-83b1-4c4b-e583-334d5417410b"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Colab notebook detected. To show errors in colab notebook, set debug=True in launch()\n",
+            "* Running on public URL: https://42b48ccd9402c5a9c1.gradio.live\n",
+            "\n",
+            "This share link expires in 1 week. For free permanent hosting and GPU upgrades, run `gradio deploy` from the terminal in the working directory to deploy to Hugging Face Spaces (https://huggingface.co/spaces)\n"
+          ]
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "<IPython.core.display.HTML object>"
+            ],
+            "text/html": [
+              "<div><iframe src=\"https://42b48ccd9402c5a9c1.gradio.live\" width=\"100%\" height=\"500\" allow=\"autoplay; camera; microphone; clipboard-read; clipboard-write;\" frameborder=\"0\" allowfullscreen></iframe></div>"
+            ]
+          },
+          "metadata": {}
+        }
+      ],
+      "source": [
+        "try:\n",
+        "    import gradio as gr\n",
+        "    def fitbot_interface(message, goal, equipment, experience_level, limitations, steps, active_minutes, sedentary_minutes, workout_minutes):\n",
+        "        return fitbot_memory_agent.respond(message, goal, equipment, experience_level, limitations, int(steps), int(active_minutes), int(sedentary_minutes), int(workout_minutes))\n",
+        "    demo = gr.Interface(fn=fitbot_interface, inputs=[gr.Textbox(label='Message', value='Recommend a workout'), gr.Dropdown(['lose weight','maintain fitness','gain strength','build endurance','recovery'], label='Goal', value='lose weight'), gr.Dropdown(['bodyweight','dumbbells','resistance bands','gym'], label='Equipment', value='bodyweight'), gr.Dropdown(['beginner','intermediate','advanced'], label='Experience Level', value='beginner'), gr.Textbox(label='Limitations or Injuries', value='none'), gr.Number(label='Steps Today', value=4200), gr.Number(label='Active Minutes', value=18), gr.Number(label='Sedentary Minutes', value=980), gr.Number(label='Workout Minutes Available', value=30)], outputs=gr.Textbox(label='FitBot Response', lines=24), title='FitBot LangChain-Ready AI Agent')\n",
+        "    demo.launch(share=True)\n",
+        "except Exception as e:\n",
+        "    print('Gradio is not installed. In Colab, run: !pip install gradio')\n",
+        "    print(e)\n"
+      ],
+      "id": "mAqetReHPlje"
+    }
+  ],
+  "metadata": {
+    "kernelspec": {
+      "display_name": "Python 3",
+      "language": "python",
+      "name": "python3"
+    },
+    "language_info": {
+      "name": "python",
+      "version": "3.11"
+    },
+    "colab": {
+      "provenance": []
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+}
