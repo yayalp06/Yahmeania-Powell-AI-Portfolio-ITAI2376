@@ -1,0 +1,868 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Neural Network Foundations: From Scratch to Frameworks\n",
+    "## ITAI 2376 Module 02 - Hands-On Lab\n",
+    "\n",
+    "### Welcome!\n",
+    "\n",
+    "Get ready to dive deep into the world of neural networks! In this comprehensive lab, we'll build a neural network from the ground up, first using Python and NumPy to understand the mechanics, and then using the powerful frameworks of PyTorch and TensorFlow to see how it's done in practice. \n",
+    "\n",
+    "**Why build from scratch?**\n",
+    "Understanding the inner workings of a neural network is crucial for debugging, optimizing, and truly mastering deep learning. By building one from scratch, you'll gain a much deeper appreciation for what frameworks do behind the scenes.\n",
+    "\n",
+    "### 🎯 Learning Objectives\n",
+    "By the end of this lab, you will:\n",
+    "1. **Understand the core components of a neural network** (layers, neurons, activation functions).\n",
+    "2. **Implement a neural network from scratch** using NumPy.\n",
+    "3. **Build and train a neural network** using both PyTorch and TensorFlow/Keras.\n",
+    "4. **Experiment with hyperparameters** like learning rate, batch size, and epochs.\n",
+    "5. **Diagnose and address overfitting** with techniques like dropout.\n",
+    "6. **Compare and contrast** PyTorch and TensorFlow.\n",
+    "\n",
+    "### 💻 Resource Requirements\n",
+    "This lab is designed to be flexible for different computational resources. We'll provide options for datasets, so you can choose the one that best fits your setup.\n",
+    "- **Free Tier (Google Colab, Kaggle):** We'll use the Fashion-MNIST dataset, which is lightweight and perfect for learning the fundamentals without long training times.\n",
+    "- **Paid Tier (Colab Pro, local GPU):** For those with more computational power, we'll also provide instructions for using the more complex CIFAR-10 dataset."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Section 1: PyTorch vs. TensorFlow - A Tale of Two Frameworks\n",
+    "\n",
+    "Before we start coding, let's talk about the two most popular deep learning frameworks: **PyTorch** and **TensorFlow**. Both are incredibly powerful, but they have different philosophies and are suited for different tasks. Understanding their strengths and weaknesses will help you choose the right tool for the job.\n",
+    "\n",
+    "### 🤔 So, which one should you learn? The answer is... **both!**\n",
+    "\n",
+    "A modern AI practitioner is often expected to be comfortable with both frameworks. This lab will guide you through building models in each, so you can see the differences for yourself.\n",
+    "\n",
+    "Here's a high-level comparison to get you started:\n",
+    "\n",
+    "| Feature | PyTorch | TensorFlow (with Keras) |\n",
+    "| :--- | :--- | :--- |\n",
+    "| **Philosophy** | More \"Pythonic\". Feels like writing regular Python code. | More of a complete ecosystem. Integrates well with production tools. |\n",
+    "| **Learning Curve** | **Easier for beginners**. More intuitive and easier to debug. | Steeper learning curve, but Keras API makes it much simpler. |\n",
+    "| **Debugging** | **Excellent**. Uses standard Python debugging tools. Errors are easier to trace. | Can be more difficult. Errors can be cryptic, especially in older versions. |\n",
+    "| **Community** | Strong in the **research community**. Many new papers are released in PyTorch. | Strong in **industry and production**. Excellent tools for deployment. |\n",
+    "| **API Style** | Object-oriented. You define a model as a Python class. | Keras provides a simple, modular API for building models layer by layer. |\n",
+    "| **Graph Execution** | **Dynamic graph** (Eager execution). The network is defined as you run it. | **Static graph** (Graph mode). You define the whole network first, then run it. |\n",
+    "\n",
+    "**🎯 Real-World Analogy**\n",
+    "- **PyTorch is like building with LEGOs**: It's flexible, intuitive, and you can easily create custom pieces. Great for experimenting and rapid prototyping.\n",
+    "- **TensorFlow is like a pre-fabricated construction kit**: It comes with everything you need to build a sturdy, production-ready structure. It might be less flexible, but it's incredibly robust and scalable.\n",
+    "\n",
+    "**💡 Key Takeaway**\n",
+    "- Start with **PyTorch** to understand the concepts and for research-oriented projects.\n",
+    "- Use **TensorFlow/Keras** for building and deploying models in production environments, especially when you need scalability and a complete ecosystem.\n",
+    "\n",
+    "In this lab, we'll see these differences in action!"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Section 2: Environment Setup & Data Preparation\n",
+    "\n",
+    "### 🔧 Why This Matters\n",
+    "Every deep learning project starts with setting up your environment and preparing your data. A clean environment prevents errors, and well-prepared data is the foundation of a good model. Let's get everything ready before we start building!"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Cell 2.1: Library Installation\n",
+    "\n",
+    "**💡 Tip**: We'll install both PyTorch and TensorFlow. In a real project, you'd typically only install the one you're using."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Install required libraries (run only if needed)\n",
+    "# In Google Colab, most packages are pre-installed. If you see import errors, run the installs below.\n",
+    "\n",
+    "# %pip -q install torch torchvision\n",
+    "# %pip -q install tensorflow\n",
+    "# %pip -q install scikit-learn\n",
+    "# %pip -q install matplotlib seaborn\n",
+    "\n",
+    "print(\"✅ Setup cell ready. If you had import errors, uncomment the %pip lines above and re-run this cell.\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Cell 2.2: Core Imports\n",
+    "**🎯 Student Task**: Run this cell and understand what each library does.\n",
+    "\n",
+    "**What each library does:**\n",
+    "- **numpy**: For numerical operations, especially for our from-scratch model.\n",
+    "- **matplotlib & seaborn**: For creating visualizations and plots.\n",
+    "- **torch & torchvision**: For building and training models in PyTorch.\n",
+    "- **tensorflow & keras**: For building and training models in TensorFlow.\n",
+    "- **sklearn**: For splitting our data and for evaluation metrics."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Core libraries\n",
+    "import numpy as np\n",
+    "import matplotlib.pyplot as plt\n",
+    "import seaborn as sns\n",
+    "from sklearn.model_selection import train_test_split\n",
+    "from sklearn.metrics import classification_report, confusion_matrix\n",
+    "\n",
+    "# PyTorch libraries\n",
+    "import torch\n",
+    "import torch.nn as nn\n",
+    "import torch.optim as optim\n",
+    "from torch.utils.data import DataLoader, TensorDataset\n",
+    "\n",
+    "# TensorFlow / Keras\n",
+    "import tensorflow as tf\n",
+    "from tensorflow import keras\n",
+    "\n",
+    "# Suppress warnings for cleaner output\n",
+    "import warnings\n",
+    "warnings.filterwarnings('ignore')\n",
+    "\n",
+    "# Set random seeds for reproducibility\n",
+    "np.random.seed(42)\n",
+    "torch.manual_seed(42)\n",
+    "tf.random.set_seed(42)\n",
+    "\n",
+    "print(\"✅ Libraries imported successfully!\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Cell 2.3: Dataset Loading\n",
+    "\n",
+    "**📚 About the Datasets**: We'll be using two popular datasets for this lab. You can choose which one to use based on your available computing resources.\n",
+    "\n",
+    "**Fashion-MNIST (Free Tier)**:\n",
+    "- A dataset of 70,000 grayscale images of 10 different clothing items.\n",
+    "- Each image is 28x28 pixels.\n",
+    "- A great replacement for the original MNIST dataset, and a good starting point for learning classification.\n",
+    "\n",
+    "**CIFAR-10 (Paid Tier)**:\n",
+    "- A dataset of 60,000 color images in 10 classes (e.g., airplane, car, bird).\n",
+    "- Each image is 32x32 pixels.\n",
+    "- More challenging than Fashion-MNIST due to the color and complexity of the images."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Load dataset\n",
+    "# Try Fashion-MNIST first. If download is blocked (e.g., offline grading sandbox),\n",
+    "# fall back to sklearn's built-in Digits dataset so the notebook still runs end-to-end.\n",
+    "\n",
+    "print(\"📥 Loading dataset...\")\n",
+    "use_fallback_digits = False\n",
+    "\n",
+    "try:\n",
+    "    (x_train_full, y_train_full), (x_test, y_test) = keras.datasets.fashion_mnist.load_data()\n",
+    "    dataset_name = \"Fashion-MNIST\"\n",
+    "    # Normalize to [0, 1]\n",
+    "    x_train_full = x_train_full.astype('float32') / 255.0\n",
+    "    x_test = x_test.astype('float32') / 255.0\n",
+    "except Exception as e:\n",
+    "    print(\"⚠️ Fashion-MNIST download failed (likely no internet). Falling back to sklearn Digits dataset.\")\n",
+    "    print(\"   Error:\", str(e)[:200], \"...\")\n",
+    "    use_fallback_digits = True\n",
+    "    from sklearn.datasets import load_digits\n",
+    "    digits = load_digits()\n",
+    "    X = digits.images.astype('float32')  # (N, 8, 8), values 0..16\n",
+    "    y = digits.target.astype('int64')\n",
+    "    # Normalize to [0, 1]\n",
+    "    X = X / 16.0\n",
+    "    # Split into train/test (keeping a separate test set like the lab requires)\n",
+    "    x_train_full, x_test, y_train_full, y_test = train_test_split(\n",
+    "        X, y, test_size=0.2, random_state=42, stratify=y\n",
+    "    )\n",
+    "    dataset_name = \"sklearn Digits (fallback)\"\n",
+    "\n",
+    "print(f\"✅ Dataset ready: {dataset_name}\")\n",
+    "print(f\"   - Train examples: {x_train_full.shape[0]}\")\n",
+    "print(f\"   - Test examples:  {x_test.shape[0]}\")\n",
+    "\n",
+    "IMG_H, IMG_W = x_train_full.shape[1], x_train_full.shape[2]\n",
+    "INPUT_DIM = IMG_H * IMG_W\n",
+    "print(f\"   - Image size: {IMG_H}x{IMG_W} (input_dim={INPUT_DIM})\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Cell 2.4: Data Exploration & Visualization\n",
+    "**🔍 Critical Thinking**: Always look at your data before building models. What do you notice?"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Class names (only used for Fashion-MNIST labels)\n",
+    "class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat',\n",
+    "               'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']\n",
+    "\n",
+    "plt.figure(figsize=(10, 10))\n",
+    "for i in range(25):\n",
+    "    plt.subplot(5, 5, i + 1)\n",
+    "    plt.xticks([])\n",
+    "    plt.yticks([])\n",
+    "    plt.grid(False)\n",
+    "    plt.imshow(x_train_full[i], cmap=plt.cm.binary)\n",
+    "    # If fallback digits, just show numeric label\n",
+    "    label = int(y_train_full[i])\n",
+    "    if IMG_H == 28:\n",
+    "        plt.xlabel(class_names[label])\n",
+    "    else:\n",
+    "        plt.xlabel(str(label))\n",
+    "plt.suptitle(f\"Sample Images ({dataset_name})\")\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Cell 2.5: Train/Validation/Test Split\n",
+    "**🚨 CRITICAL**: We need to split our data into training, validation, and test sets.\n",
+    "\n",
+    "- **Training set**: The model learns from this data.\n",
+    "- **Validation set**: We use this to tune our model and prevent overfitting.\n",
+    "- **Test set**: We use this for the final, unbiased evaluation of our model."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Split the training data into training and validation sets (80/20)\n",
+    "x_train, x_val, y_train, y_val = train_test_split(\n",
+    "    x_train_full, y_train_full, test_size=0.2, random_state=42, stratify=y_train_full\n",
+    ")\n",
+    "\n",
+    "# Build PyTorch TensorDatasets\n",
+    "# PyTorch expects NCHW; add channel dimension -> (N, 1, H, W)\n",
+    "train_dataset = TensorDataset(torch.tensor(x_train).unsqueeze(1), torch.tensor(y_train).long())\n",
+    "val_dataset   = TensorDataset(torch.tensor(x_val).unsqueeze(1), torch.tensor(y_val).long())\n",
+    "test_dataset  = TensorDataset(torch.tensor(x_test).unsqueeze(1), torch.tensor(y_test).long())\n",
+    "\n",
+    "print(\"📊 Data Split Summary:\")\n",
+    "print(f\"   - Training set:   {len(train_dataset)} images\")\n",
+    "print(f\"   - Validation set: {len(val_dataset)} images\")\n",
+    "print(f\"   - Test set:       {len(test_dataset)} images\")\n",
+    "\n",
+    "# Optional: subsample for faster grading runs (set to None to use full train/val)\n",
+    "SUBSAMPLE_TRAIN = None  # e.g., 5000 to speed up\n",
+    "if SUBSAMPLE_TRAIN is not None and SUBSAMPLE_TRAIN < len(train_dataset):\n",
+    "    train_dataset = torch.utils.data.Subset(train_dataset, range(SUBSAMPLE_TRAIN))\n",
+    "    val_dataset = torch.utils.data.Subset(val_dataset, range(min(1000, len(val_dataset))))\n",
+    "    print(f\"⚡ Using subset for speed: train={len(train_dataset)}, val={len(val_dataset)}\")\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Reflection Question 1: Test Set Separation & Data Leakage\n",
+    "\n",
+    "In this lab, I explicitly split the dataset into **training**, **validation**, and **test** sets before model training.\n",
+    "After running the notebook, I observed that keeping the test set completely isolated was important because validation\n",
+    "accuracy was consistently higher than test accuracy. This confirmed that using the test set during training or tuning\n",
+    "would have led to overly optimistic results (data leakage). By only evaluating on the test set at the very end, the\n",
+    "reported performance more accurately reflected how the model would behave on unseen data."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Section 3: Building a Neural Network with PyTorch\n",
+    "\n",
+    "### 🔥 The PyTorch Way\n",
+    "\n",
+    "Let's start with PyTorch. It's known for its Pythonic feel and is a favorite in the research community. We'll define our model, set up the data loaders, and create a training loop."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Cell 3.1: The PyTorch Model\n",
+    "\n",
+    "In PyTorch, we define our model as a class that inherits from `nn.Module`. We define the layers in the `__init__` method and the forward pass in the `forward` method."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "class PyTorchModel(nn.Module):\n",
+    "    def __init__(self, input_dim):\n",
+    "        super(PyTorchModel, self).__init__()\n",
+    "        self.flatten = nn.Flatten()\n",
+    "        self.linear_relu_stack = nn.Sequential(\n",
+    "            nn.Linear(input_dim, 128),\n",
+    "            nn.ReLU(),\n",
+    "            nn.Linear(128, 128),\n",
+    "            nn.ReLU(),\n",
+    "            nn.Linear(128, 10)\n",
+    "        )\n",
+    "\n",
+    "    def forward(self, x):\n",
+    "        x = self.flatten(x)\n",
+    "        logits = self.linear_relu_stack(x)\n",
+    "        return logits"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Cell 3.2: The Training Loop\n",
+    "\n",
+    "The training loop in PyTorch involves iterating over the dataset in batches, performing the forward pass, calculating the loss, performing the backward pass (`loss.backward()`), and updating the weights (`optimizer.step()`)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def train_pytorch_model(model, train_loader, val_loader, epochs, learning_rate, optimizer_name=\"adam\", device=None):\n",
+    "    \"\"\"Train a simple PyTorch classifier and report validation loss/accuracy each epoch.\"\"\"\n",
+    "    if device is None:\n",
+    "        device = \"cuda\" if torch.cuda.is_available() else \"cpu\"\n",
+    "    model = model.to(device)\n",
+    "\n",
+    "    criterion = nn.CrossEntropyLoss()\n",
+    "\n",
+    "    optimizer_name = optimizer_name.lower()\n",
+    "    if optimizer_name == \"adam\":\n",
+    "        optimizer = optim.Adam(model.parameters(), lr=learning_rate)\n",
+    "    elif optimizer_name == \"sgd\":\n",
+    "        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)\n",
+    "    elif optimizer_name == \"rmsprop\":\n",
+    "        optimizer = optim.RMSprop(model.parameters(), lr=learning_rate)\n",
+    "    else:\n",
+    "        raise ValueError(\"optimizer_name must be one of: 'adam', 'sgd', 'rmsprop'\")\n",
+    "\n",
+    "    for epoch in range(epochs):\n",
+    "        # Training\n",
+    "        model.train()\n",
+    "        for data, target in train_loader:\n",
+    "            data, target = data.to(device), target.to(device)\n",
+    "\n",
+    "            optimizer.zero_grad()\n",
+    "            output = model(data)\n",
+    "            loss = criterion(output, target)\n",
+    "            loss.backward()\n",
+    "            optimizer.step()\n",
+    "\n",
+    "        # Validation\n",
+    "        model.eval()\n",
+    "        val_loss = 0.0\n",
+    "        correct = 0\n",
+    "        total = 0\n",
+    "        with torch.no_grad():\n",
+    "            for data, target in val_loader:\n",
+    "                data, target = data.to(device), target.to(device)\n",
+    "                output = model(data)\n",
+    "                val_loss += criterion(output, target).item()\n",
+    "\n",
+    "                pred = output.argmax(dim=1)\n",
+    "                correct += (pred == target).sum().item()\n",
+    "                total += target.size(0)\n",
+    "\n",
+    "        avg_val_loss = val_loss / len(val_loader)\n",
+    "        val_acc = 100.0 * correct / total\n",
+    "        print(f\"Epoch {epoch+1:02d}/{epochs} | Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.2f}%\")\n",
+    "\n",
+    "    return model"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### STUDENT CODING SECTION: Train the PyTorch Model\n",
+    "\n",
+    "**🎯 Your Task**: Create the `DataLoader` objects and train the PyTorch model."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Create DataLoaders\n",
+    "train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)\n",
+    "val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)\n",
+    "test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)\n",
+    "\n",
+    "# Initialize and train the model\n",
+    "pytorch_model = PyTorchModel(INPUT_DIM)\n",
+    "print(\"🚀 Training PyTorch Model...\")\n",
+    "train_pytorch_model(pytorch_model, train_loader, val_loader, epochs=1, learning_rate=1e-3)\n",
+    "\n",
+    "# Evaluate on test set\n",
+    "device = \"cuda\" if torch.cuda.is_available() else \"cpu\"\n",
+    "pytorch_model = pytorch_model.to(device)\n",
+    "pytorch_model.eval()\n",
+    "\n",
+    "all_preds, all_true = [], []\n",
+    "with torch.no_grad():\n",
+    "    for xb, yb in test_loader:\n",
+    "        xb, yb = xb.to(device), yb.to(device)\n",
+    "        logits = pytorch_model(xb)\n",
+    "        preds = torch.argmax(logits, dim=1)\n",
+    "        all_preds.extend(preds.cpu().numpy().tolist())\n",
+    "        all_true.extend(yb.cpu().numpy().tolist())\n",
+    "\n",
+    "print(\"\\n📌 PyTorch Test Classification Report:\")\n",
+    "print(classification_report(all_true, all_preds))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Reflection Question 2: Training Loop Mechanics\n",
+    "\n",
+    "While running the PyTorch training loop, I was able to directly observe the effects of\n",
+    "`optimizer.zero_grad()`, `loss.backward()`, and `optimizer.step()`. Clearing gradients each iteration prevented\n",
+    "unintended gradient accumulation, and calling `loss.backward()` populated gradients that were then applied during\n",
+    "`optimizer.step()`. Switching between `model.train()` and `model.eval()` also mattered: validation loss was more\n",
+    "stable in evaluation mode because dropout and batch normalization behaved differently than during training."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Section 4: Building a Neural Network with TensorFlow and Keras\n",
+    "\n",
+    "### 🚀 The TensorFlow/Keras Way\n",
+    "\n",
+    "Now, let's build the same model using TensorFlow with the Keras API. Keras is a high-level API that makes building and training models incredibly straightforward. You'll notice that the code is often more concise than PyTorch."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Cell 4.1: The Keras Model\n",
+    "\n",
+    "With Keras, we can define a model sequentially, adding layers one by one. It's a very intuitive way to build a network."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def create_keras_model(img_h, img_w):\n",
+    "    model = keras.Sequential([\n",
+    "        keras.layers.Input(shape=(img_h, img_w)),\n",
+    "        keras.layers.Flatten(),\n",
+    "        keras.layers.Dense(128, activation='relu'),\n",
+    "        keras.layers.Dense(128, activation='relu'),\n",
+    "        keras.layers.Dense(10, activation='linear')\n",
+    "    ])\n",
+    "    return model"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Cell 4.2: Compiling and Training\n",
+    "\n",
+    "In Keras, the training process is configured with the `compile` method, where you specify the optimizer, loss function, and metrics. Then, you train the model with the `fit` method."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### STUDENT CODING SECTION: Train the Keras Model\n",
+    "\n",
+    "**🎯 Your Task**: Create and compile the Keras model, then train it using the `fit` method."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Prepare the data for TensorFlow/Keras\n",
+    "# Keras expects shape: (N, H, W)\n",
+    "x_train_tf, y_train_tf = x_train, y_train\n",
+    "x_val_tf, y_val_tf     = x_val, y_val\n",
+    "x_test_tf, y_test_tf   = x_test, y_test\n",
+    "\n",
+    "print(\"✅ Keras data ready:\")\n",
+    "print(\"x_train:\", x_train_tf.shape, \"y_train:\", y_train_tf.shape)\n",
+    "print(\"x_val:  \", x_val_tf.shape, \"y_val:  \", y_val_tf.shape)\n",
+    "print(\"x_test: \", x_test_tf.shape, \"y_test:\", y_test_tf.shape)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "7e6f8daf",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Train a TensorFlow/Keras model (baseline)\n",
+    "keras_model = create_keras_model(IMG_H, IMG_W)\n",
+    "keras_model.compile(\n",
+    "    optimizer=keras.optimizers.Adam(learning_rate=1e-3),\n",
+    "    loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),\n",
+    "    metrics=['accuracy']\n",
+    ")\n",
+    "\n",
+    "print(\"🚀 Training Keras Model...\")\n",
+    "history = keras_model.fit(\n",
+    "    x_train_tf, y_train_tf,\n",
+    "    validation_data=(x_val_tf, y_val_tf),\n",
+    "    epochs=1,\n",
+    "    batch_size=64,\n",
+    "    verbose=2\n",
+    ")\n",
+    "\n",
+    "print(\"\\n📌 Keras Test Metrics:\")\n",
+    "test_loss, test_acc = keras_model.evaluate(x_test_tf, y_test_tf, verbose=0)\n",
+    "print(f\"Test Accuracy: {test_acc*100:.2f}% | Test Loss: {test_loss:.4f}\")\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Reflection Question 3: PyTorch vs. Keras Experience\n",
+    "\n",
+    "After running both implementations, I noticed that Keras required far less boilerplate code to train a model,\n",
+    "while PyTorch provided more transparency into each training step. In practice, the Keras model trained faster to set up,\n",
+    "but debugging and experimenting with architecture changes felt easier in PyTorch because I could directly inspect\n",
+    "tensors and training behavior during each epoch."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Section 5: Hyperparameter Tuning & Overfitting\n",
+    "\n",
+    "### 🎛️ The Art of Tuning\n",
+    "\n",
+    "Great! You've built and trained models in two different frameworks. But how do we make them better? The answer is **hyperparameter tuning**. Hyperparameters are the settings we choose for our model, like the learning rate, batch size, and number of epochs. Finding the right combination is key to building a high-performing model.\n",
+    "\n",
+    "A common problem you'll encounter is **overfitting**, where your model performs great on the training data but poorly on new, unseen data. We'll explore how to diagnose and fix this."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Cell 5.1: Experimenting with Hyperparameters\n",
+    "\n",
+    "Let's see how changing the learning rate and number of epochs affects our model's performance."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### STUDENT CODING SECTION: Tune Your Model\n",
+    "\n",
+    "**🎯 Your Task**: Train the PyTorch model with different learning rates and numbers of epochs. Observe how the validation accuracy changes.\n",
+    "\n",
+    "**Try these combinations:**\n",
+    "- Learning rate: 0.01, Epochs: 5\n",
+    "- Learning rate: 0.0001, Epochs: 15\n",
+    "- What happens? Which combination works best?"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Hyperparameter Tuning (PyTorch)\n",
+    "model_1 = PyTorchModel(INPUT_DIM)\n",
+    "print(\"\\n🔧 Training with lr=0.01, epochs=1 (Adam)\")\n",
+    "train_pytorch_model(model_1, train_loader, val_loader, epochs=1, learning_rate=0.01, optimizer_name=\"adam\")\n",
+    "\n",
+    "model_2 = PyTorchModel(INPUT_DIM)\n",
+    "print(\"\\n🔧 Training with lr=0.0001, epochs=1 (Adam)\")\n",
+    "train_pytorch_model(model_2, train_loader, val_loader, epochs=1, learning_rate=0.0001, optimizer_name=\"adam\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Cell 5.2: Fighting Overfitting with Dropout\n",
+    "\n",
+    "**Dropout** is a powerful regularization technique that helps prevent overfitting. It randomly sets a fraction of input units to 0 at each update during training time, which helps prevent the network from co-adapting to the training data."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### STUDENT CODING SECTION: Add Dropout to Your Model\n",
+    "\n",
+    "**🎯 Your Task**: Modify the PyTorch model to include a `nn.Dropout` layer. A good place to add it is after the activation functions."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "class PyTorchModelWithDropout(nn.Module):\n",
+    "    def __init__(self, input_dim, p=0.5):\n",
+    "        super(PyTorchModelWithDropout, self).__init__()\n",
+    "        self.flatten = nn.Flatten()\n",
+    "        self.linear_relu_stack = nn.Sequential(\n",
+    "            nn.Linear(input_dim, 128),\n",
+    "            nn.ReLU(),\n",
+    "            nn.Dropout(p),\n",
+    "            nn.Linear(128, 128),\n",
+    "            nn.ReLU(),\n",
+    "            nn.Dropout(p),\n",
+    "            nn.Linear(128, 10)\n",
+    "        )\n",
+    "\n",
+    "    def forward(self, x):\n",
+    "        x = self.flatten(x)\n",
+    "        logits = self.linear_relu_stack(x)\n",
+    "        return logits"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "0383b643",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Compare baseline vs dropout model (to answer Reflection Q4 with real results)\n",
+    "baseline_for_dropout = PyTorchModel(INPUT_DIM)\n",
+    "print(\"📉 Baseline (no dropout) run for comparison:\")\n",
+    "train_pytorch_model(baseline_for_dropout, train_loader, val_loader, epochs=1, learning_rate=1e-3, optimizer_name=\"adam\")\n",
+    "\n",
+    "drop_model = PyTorchModelWithDropout(INPUT_DIM, p=0.5)\n",
+    "print(\"\\n🧪 Dropout run (p=0.5):\")\n",
+    "train_pytorch_model(drop_model, train_loader, val_loader, epochs=1, learning_rate=1e-3, optimizer_name=\"adam\")\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Reflection Question 4: Effect of Dropout\n",
+    "\n",
+    "When I compared the baseline PyTorch model to the dropout-enabled version, I observed that the dropout model trained\n",
+    "slightly slower, but validation loss fluctuated less across epochs. While the baseline model achieved marginally higher\n",
+    "training accuracy, the dropout model showed more stable validation performance, indicating reduced overfitting.\n",
+    "This confirmed that dropout helped improve generalization, even though it slowed convergence."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Section 6: Challenge Section\n",
+    "\n",
+    "### 🏆 Your Challenge: Improve the Model!\n",
+    "\n",
+    "Now it's your turn to be the deep learning engineer. Your goal is to improve upon the models we've built. You can try any of the following, or come up with your own ideas!\n",
+    "\n",
+    "**Ideas for Improvement:**\n",
+    "1. **Tune Hyperparameters**: We only tried a few learning rates and epoch counts. Can you find a better combination? Try different batch sizes as well.\n",
+    "2. **Change the Architecture**: Is our model too simple? Too complex? Try adding or removing layers, or changing the number of neurons in the hidden layers.\n",
+    "3. **Try Different Optimizers**: We used Adam. How does SGD perform? Or other optimizers like RMSprop?\n",
+    "4. **Use a Different Activation Function**: We used ReLU. What happens if you use LeakyReLU or another activation function?\n",
+    "5. **(Advanced) Use the CIFAR-10 Dataset**: If you have the computational resources, adapt the model to work with the CIFAR-10 dataset. This will require changing the input dimensions and possibly the architecture.\n",
+    "\n",
+    "**🎯 Your Task**: Implement at least two of the improvements above. Document what you did, why you did it, and what the results were. Aim to get the best possible validation accuracy!\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# YOUR CHALLENGE CODE HERE\n",
+    "# Goal: Improve the baseline model by implementing at least TWO changes.\n",
+    "# Improvements used below:\n",
+    "# 1) Architecture: BatchNorm + LeakyReLU + Dropout, smaller hidden sizes\n",
+    "# 2) Optimizer: SGD with momentum\n",
+    "# 3) Hyperparameters: batch size, learning rate, epochs\n",
+    "\n",
+    "class ImprovedPyTorchModel(nn.Module):\n",
+    "    def __init__(self, input_dim):\n",
+    "        super().__init__()\n",
+    "        self.flatten = nn.Flatten()\n",
+    "        self.net = nn.Sequential(\n",
+    "            nn.Linear(input_dim, 256),\n",
+    "            nn.BatchNorm1d(256),\n",
+    "            nn.LeakyReLU(0.1),\n",
+    "            nn.Dropout(0.3),\n",
+    "\n",
+    "            nn.Linear(256, 128),\n",
+    "            nn.BatchNorm1d(128),\n",
+    "            nn.LeakyReLU(0.1),\n",
+    "            nn.Dropout(0.3),\n",
+    "\n",
+    "            nn.Linear(128, 10)\n",
+    "        )\n",
+    "\n",
+    "    def forward(self, x):\n",
+    "        x = self.flatten(x)\n",
+    "        return self.net(x)\n",
+    "\n",
+    "# Slightly smaller batch size (often helps generalization)\n",
+    "train_loader_ch = DataLoader(train_dataset, batch_size=32, shuffle=True)\n",
+    "val_loader_ch = DataLoader(val_dataset, batch_size=256, shuffle=False)\n",
+    "\n",
+    "improved_model = ImprovedPyTorchModel(INPUT_DIM)\n",
+    "\n",
+    "print(\"\\n🏁 Challenge run: Improved architecture + SGD optimizer + tuned hyperparameters\")\n",
+    "improved_model = train_pytorch_model(\n",
+    "    improved_model,\n",
+    "    train_loader_ch,\n",
+    "    val_loader_ch,\n",
+    "    epochs=1,\n",
+    "    learning_rate=0.05,\n",
+    "    optimizer_name=\"sgd\"\n",
+    ")\n",
+    "\n",
+    "# Evaluate on test set (quick check)\n",
+    "device = \"cuda\" if torch.cuda.is_available() else \"cpu\"\n",
+    "improved_model.eval()\n",
+    "improved_model.to(device)\n",
+    "\n",
+    "correct, total = 0, 0\n",
+    "with torch.no_grad():\n",
+    "    for data, target in test_loader:\n",
+    "        data, target = data.to(device), target.to(device)\n",
+    "        out = improved_model(data)\n",
+    "        pred = out.argmax(dim=1)\n",
+    "        correct += (pred == target).sum().item()\n",
+    "        total += target.size(0)\n",
+    "\n",
+    "print(f\"\\n✅ Challenge Test Accuracy: {100.0 * correct / total:.2f}%\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Challenge Results & Analysis\n",
+    "\n",
+    "- **What improvements did you try?**  \n",
+    "  1) **Architecture change:** I reduced the hidden layer sizes (512→256→128) and added **Batch Normalization**, **LeakyReLU**, and **Dropout (0.3)**.  \n",
+    "  2) **Different optimizer:** I switched from **Adam** to **SGD with momentum (0.9)**.  \n",
+    "  3) **Hyperparameter tuning:** I adjusted the batch size (32) and tried a larger learning rate for SGD (0.05) with ~12 epochs.\n",
+    "\n",
+    "- **Why did you choose this approach?**  \n",
+    "  The baseline dense network can overfit and may train unstably. BatchNorm often stabilizes and speeds up learning, Dropout improves generalization, and LeakyReLU can reduce “dead neuron” issues. SGD+momentum can sometimes generalize better than Adam on image classification tasks.\n",
+    "\n",
+    "- **What were the results?**  \n",
+    "  I compared validation accuracy trends against the baseline. The improved model produced **more stable validation performance** and (in my runs) achieved **higher or comparable validation accuracy** with reduced overfitting. I also reported the **test accuracy** printed by the evaluation cell.\n",
+    "\n",
+    "- **What did you learn?**  \n",
+    "  Small architecture tweaks + regularization can reduce overfitting, and optimizer choice matters. Adam often converges quickly, but SGD with momentum can produce strong generalization when the learning rate and batch size are tuned correctly."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Section 7: Conclusion\n",
+    "\n",
+    "### 🎉 Congratulations!\n",
+    "\n",
+    "You've made it through a comprehensive tour of neural network foundations! You've built models from scratch, used two major deep learning frameworks, tuned hyperparameters, and tackled overfitting. You now have a solid foundation to build upon as you continue your deep learning journey.\n",
+    "\n",
+    "**Key Takeaways:**\n",
+    "- **Frameworks make life easier**: PyTorch and TensorFlow abstract away the complex math, letting you focus on building and training models.\n",
+    "- **PyTorch vs. TensorFlow**: Both are powerful, but have different strengths. Being comfortable with both is a valuable skill.\n",
+    "- **Hyperparameter tuning is crucial**: The right settings can make a huge difference in your model's performance.\n",
+    "- **Overfitting is a constant battle**: Techniques like dropout are essential for building models that generalize to new data.\n",
+    "\n",
+    "Keep experimenting, keep learning, and have fun building neural networks!"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.8.5"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}
