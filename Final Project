@@ -1,0 +1,39 @@
+# Deep Learning Midterm Project
+
+## Overview
+This project contains coursework, analysis, and evaluations completed during the midterm portion of the Deep Learning & Artificial Intelligence course.
+
+---
+
+## Topics Covered
+- Neural Networks
+- Machine Learning Concepts
+- Data Preprocessing
+- AI Evaluation Metrics
+- Deep Learning Fundamentals
+
+---
+
+## Skills Demonstrated
+- Technical Analysis
+- AI Problem Solving
+- Deep Learning Concepts
+- Data Interpretation
+
+---
+
+## Technologies Used
+- Python
+- TensorFlow
+- Keras
+- Jupyter Notebook
+
+---
+
+## Included Files
+- Midterm assignment PDF
+- Supporting notes
+- AI resources
+```bash
+pip install -r requirements.txt
+jupyter notebook
