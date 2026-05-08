@@ -2,7 +2,24 @@
 
 ## Overview
 This project contains coursework, analysis, and evaluations completed during the midterm portion of the Deep Learning & Artificial Intelligence course.
+Dataset Information
 
+This project uses Fitbit-inspired fitness tracking data.
+
+Features include:
+- Daily steps
+- Calories burned
+- Activity intensity
+- Sleep metrics
+- Heart rate indicators
+
+Preprocessing Steps:
+- Missing value handling
+- Duplicate removal
+- Feature engineering
+- Data normalization
+
+The dataset was used to train machine learning models for fitness prediction and recommendation generation.
 ---
 
 ## Topics Covered
@@ -26,9 +43,13 @@ This project contains coursework, analysis, and evaluations completed during the
 - Python
 - TensorFlow
 - Keras
-- Jupyter Notebook
+- Google Colab
+- Gradio
+- Langchang
 
 ---
+
+The dataset was used to train machine learning models for fitness prediction and recommendation generation.
 
 ## Included Files
 - Midterm assignment PDF
