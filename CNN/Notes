@@ -1,0 +1,11 @@
+Dataset Information
+
+This project uses an image classification dataset.
+
+Preprocessing Steps:
+- Image resizing
+- Normalization
+- Train/test split
+- Data augmentation
+
+The dataset Puppys & Bagels was used to train and evaluate the CNN model.
